@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { QrCode, Save, Trash2, Check, Zap } from "lucide-react";
+import { QrCode, Save, Trash2, Zap } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import {
   Box,
@@ -41,7 +41,6 @@ export function QRScanner() {
       toast.error("Student not found");
       return;
     }
-    //toast.success(`Scanned ${foundStudent.name}`);
 
     const alreadyScanned = scannedStudents.find(
       (s) => s.studentId === studentId,
@@ -50,7 +49,6 @@ export function QRScanner() {
       toast.warning("Student already scanned");
       return;
     }
-    //setScannedStudents([...scannedStudents, { studentId, timestamp: new Date().toISOString() }]);
 
     const timestamp = new Date().toLocaleTimeString();
     setScannedStudents([...scannedStudents, { studentId, timestamp }]);
