@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { Outlet, Link, useNavigate, useLocation } from "react-router";
-import { Zap, User, LogOut, Home, ScanBarcode } from "lucide-react";
+import { Sparkles, User, LogOut, Home, ScanBarcode } from "lucide-react";
 import { useAppContext } from "../context/useAppContext";
 
 export function AppLayout() {
@@ -36,7 +36,7 @@ export function AppLayout() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16 items-center">
             <div className="flex items-center gap-2">
-              <Zap
+              <Sparkles
                 className="text-indigo-600 dark:text-indigo-400 fill-current"
                 size={24}
               />
