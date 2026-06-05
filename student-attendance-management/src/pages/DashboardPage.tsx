@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { motion } from "motion/react";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import {
@@ -17,14 +16,36 @@ import {
   TableCell,
   TableHead,
 } from "../components/ui/table";
-import { UserIcon, ChevronDown, Search } from "lucide-react";
+import {
+  UserIcon,
+  ChevronDown,
+  Search,
+  PlusCircle,
+  Library,
+  Eye,
+  Edit,
+  Trash2,
+  MoreHorizontal,
+} from "lucide-react";
+import { IconButton, Menu, MenuItem } from "@mui/material";
 import { useAppContext } from "../context/useAppContext";
 import { initialStudents } from "../data/mockData";
 import type { Student as StudentType } from "../types";
 import { cn } from "../lib/utils";
+import { Link } from "react-router";
 
 function StudentList({ student }: { student: StudentType }) {
   const [open, setOpen] = useState(false);
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const opens = Boolean(anchorEl);
+  const handleClick = (event: React.MouseEvent<HTMLElement>) => {
+    setAnchorEl(event.currentTarget);
+    setOpen(false);
+  };
+  const handleClose = () => {
+    setAnchorEl(null);
+    setOpen(false);
+  };
 
   const todayDate = new Date().toISOString().split("T")[0];
   const todayAttendance = student.attendanceRecords.find(
@@ -111,10 +132,56 @@ function StudentList({ student }: { student: StudentType }) {
             </span>
           </div>
         </TableCell>
+        <TableCell className="text-right">
+          <div className="flex items-center justify-end gap-1">
+            <Link
+              className="inline-flex size-8 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+              to={`/student/${student.id}`}
+            >
+              <Eye size={16} />
+            </Link>
+            <IconButton
+              aria-label="more"
+              id="long-button"
+              aria-controls={opens ? "long-menu" : undefined}
+              aria-expanded={opens}
+              aria-haspopup="true"
+              onClick={handleClick}
+            >
+              <MoreHorizontal size={16} />{" "}
+            </IconButton>
+            <Menu
+              id="long-menu"
+              anchorEl={anchorEl}
+              open={opens}
+              onClose={handleClose}
+              slotProps={{
+                paper: {
+                  style: {
+                    maxHeight: 48 * 4.5,
+                    width: "20ch",
+                  },
+                },
+                list: {
+                  "aria-labelledby": "long-button",
+                },
+              }}
+            >
+              <MenuItem key="Edit" onClick={handleClose}>
+                <Edit size={16} className="mr-2" />
+                Edit
+              </MenuItem>
+              <MenuItem key="Delete" onClick={handleClose}>
+                <Trash2 size={16} className="mr-2" />
+                Delete
+              </MenuItem>
+            </Menu>
+          </div>
+        </TableCell>
       </TableRow>
       {open && (
         <TableRow className="bg-zinc-50/80 dark:bg-zinc-900/50">
-          <TableCell colSpan={6} className="p-0">
+          <TableCell colSpan={8} className="p-0">
             <div className="px-4 py-4">
               <p className="mb-3 text-sm font-semibold text-zinc-900 dark:text-zinc-50">
                 Attendance History
@@ -186,11 +253,7 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-8">
-      <motion.header
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4"
-      >
+      <div className="flex justify-between items-center">
         <div>
           <div className="flex items-center gap-3 mb-2">
             <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
@@ -212,7 +275,23 @@ export function DashboardPage() {
             View student attendance and daily status.
           </p>
         </div>
-      </motion.header>
+        <div className="flex flex-col sm:flex-row gap-3">
+          <Link
+            to="/create-user"
+            className="py-3 px-6 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-900 dark:text-zinc-50 rounded-xl font-semibold transition-colors flex items-center justify-center gap-2 group"
+          >
+            <PlusCircle size={20} className="text-indigo-500" />
+            <span>New User</span>
+          </Link>
+          <Link
+            to="/"
+            className="py-3 px-6 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold transition-colors flex items-center justify-center gap-2 group shadow-lg shadow-indigo-600/20"
+          >
+            <Library size={20} />
+            <span>Import Users</span>
+          </Link>
+        </div>
+      </div>
 
       {students.length === 0 ? (
         <div className="text-center py-20 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-3xl">
@@ -254,13 +333,14 @@ export function DashboardPage() {
                   <TableHead>Class</TableHead>
                   <TableHead>Today</TableHead>
                   <TableHead>Attendance</TableHead>
+                  <TableHead className="w-10 text-center">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredStudents.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={6}
+                      colSpan={8}
                       className="h-24 text-center text-zinc-500"
                     >
                       No students match your search.

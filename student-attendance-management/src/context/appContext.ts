@@ -8,7 +8,15 @@ export type User = {
   username: string
   password: string
   role: UserRole
-  id: string
+  id: string,
+  createdAt: Date,
+  updatedAt: Date,
+  qrCode: string,
+  isActive: boolean,
+  isDeleted: boolean,
+  isVerified: boolean,
+  isSuspended: boolean,
+  isLocked: boolean
 }
 
 export interface AppContextType {
@@ -16,6 +24,7 @@ export interface AppContextType {
   login: (username: string, password: string) => boolean
   logout: () => void
   getAllUsers: () => User[]
+  addUser: (user: User) => void
 }
 
 export const AppContext = createContext<AppContextType | undefined>(undefined)

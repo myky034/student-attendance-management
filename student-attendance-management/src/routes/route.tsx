@@ -6,6 +6,7 @@ import { AdminDashboard } from "../pages/AdminDashboard";
 import { AppLayout } from "../components/AppLayout";
 import { DashboardPage } from "../pages/DashboardPage";
 import { QRScanner } from "../pages/QRScanner";
+import { CreateUserPage } from "../pages/CreateUserPage";
 
 export const router = createBrowserRouter([
   {
@@ -37,6 +38,10 @@ export const router = createBrowserRouter([
       {
         path: "qrscanner",
         Component: QRScanner,
+      },
+      {
+        path: "create-user",
+        Component: CreateUserPage,
       },
     ],
   },
