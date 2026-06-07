@@ -88,6 +88,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const getAllUsers = () => users;
 
+  const getUserById = (userId: string) => users.find((user) => user.id === userId);
+
   const addUser = (userToAdd: User) => {
     const newUser: User = {
       ...userToAdd,
@@ -97,8 +99,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setUsers((prev) => [...prev, newUser]);
   };
 
+  const updateUser = (userId: string, userToUpdate: User) => {
+    setUsers((prev) => prev.map((user) => user.id === userId ? userToUpdate : user));
+  };
+
   return (
-    <AppContext.Provider value={{ user, login, logout, getAllUsers, addUser }}>
+    <AppContext.Provider value={{ user, login, logout, getAllUsers, addUser, getUserById, updateUser }}>
       {children}
     </AppContext.Provider>
   );

@@ -17,6 +17,17 @@ import {
   TableHead,
 } from "../components/ui/table";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "../components/ui/alert-dialog";
+import {
   UserIcon,
   ChevronDown,
   Search,
@@ -27,17 +38,33 @@ import {
   Trash2,
   MoreHorizontal,
 } from "lucide-react";
-import { IconButton, Menu, MenuItem } from "@mui/material";
+import { Chip, IconButton, Menu, MenuItem } from "@mui/material";
 import { useAppContext } from "../context/useAppContext";
 import { initialStudents } from "../data/mockData";
 import type { Student as StudentType } from "../types";
 import { cn } from "../lib/utils";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
+import { Pagination } from "../components/ui/pagination";
+
+const ITEM_PER_PAGE = 15;
 
 function StudentList({ student }: { student: StudentType }) {
   const [open, setOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const opens = Boolean(anchorEl);
+  const [historyPage, setHistoryPage] = useState(1);
+  const historyPerPage = 5;
+  const navigate = useNavigate();
+
+  //Pagination for history
+  const totalHistoryPages = Math.ceil(
+    student.attendanceRecords.length / historyPerPage,
+  );
+  const paginatedHistory = student.attendanceRecords.slice(
+    (historyPage - 1) * historyPerPage,
+    historyPage * historyPerPage,
+  );
+
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
     setOpen(false);
@@ -45,6 +72,15 @@ function StudentList({ student }: { student: StudentType }) {
   const handleClose = () => {
     setAnchorEl(null);
     setOpen(false);
+  };
+
+  const handleEdit = () => {
+    navigate(`/users/edit/${student.id}`);
+    setOpen(false);
+  };
+
+  const handleDelete = () => {
+    console.log("Delete");
   };
 
   const todayDate = new Date().toISOString().split("T")[0];
@@ -97,7 +133,7 @@ function StudentList({ student }: { student: StudentType }) {
           </div>
         </TableCell>
         <TableCell>{student.email}</TableCell>
-        <TableCell>{student.class}</TableCell>
+        <TableCell>{student.class.name}</TableCell>
         <TableCell>
           {todayAttendance ? (
             <Badge
@@ -167,14 +203,38 @@ function StudentList({ student }: { student: StudentType }) {
                 },
               }}
             >
-              <MenuItem key="Edit" onClick={handleClose}>
+              <MenuItem key="Edit" onClick={handleEdit}>
                 <Edit size={16} className="mr-2" />
                 Edit
               </MenuItem>
-              <MenuItem key="Delete" onClick={handleClose}>
-                <Trash2 size={16} className="mr-2" />
-                Delete
-              </MenuItem>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <MenuItem key="Delete" onClick={handleDelete}>
+                    <Trash2 size={16} className="mr-2" />
+                    Delete
+                  </MenuItem>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete User?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Are you sure you want to delete "{student.name}"? This action
+                      cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel onClick={handleClose}>
+                      Cancel
+                    </AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={handleDelete}
+                      className="bg-red-600 hover:bg-red-700"
+                    >
+                      Delete
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </Menu>
           </div>
         </TableCell>
@@ -196,13 +256,12 @@ function StudentList({ student }: { student: StudentType }) {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {student.attendanceRecords
+                    {paginatedHistory
                       .sort(
                         (a, b) =>
                           new Date(b.date).getTime() -
                           new Date(a.date).getTime(),
                       )
-                      .slice(0, 10)
                       .map((record) => (
                         <TableRow key={`${record.date}-${record.status}`}>
                           <TableCell>
@@ -212,13 +271,17 @@ function StudentList({ student }: { student: StudentType }) {
                             <Badge
                               variant={
                                 record.status === "present"
-                                  ? "default"
-                                  : "destructive"
+                                  ? "success"
+                                  : record.status === "excused absence"
+                                    ? "warning"
+                                    : "danger"
                               }
                             >
                               {record.status === "present"
                                 ? "Present"
-                                : "Absent"}
+                                : record.status === "excused absence"
+                                  ? "Excused Absence"
+                                  : "Absent"}
                             </Badge>
                           </TableCell>
                           <TableCell>{record.timestamp}</TableCell>
@@ -231,6 +294,11 @@ function StudentList({ student }: { student: StudentType }) {
                   No attendance records yet
                 </p>
               )}
+              <Pagination
+                currentPage={historyPage}
+                totalPages={totalHistoryPages}
+                onPageChange={setHistoryPage}
+              />
             </div>
           </TableCell>
         </TableRow>
@@ -243,12 +311,22 @@ export function DashboardPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [students] = useState(initialStudents);
   const { user } = useAppContext();
+  const navigate = useNavigate();
+  const [userPage, setUserPage] = useState(1);
 
-  const filteredStudents = students.filter(
+  //Pagination for users
+  const totalUserPages = Math.ceil(students.length / ITEM_PER_PAGE);
+  const paginatedStudents = students.slice(
+    (userPage - 1) * ITEM_PER_PAGE,
+    userPage * ITEM_PER_PAGE,
+  );
+
+  const filteredStudents = paginatedStudents.filter(
     (student) =>
-      student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      student.isDeleted === false &&
+      (student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       student.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      student.class.toLowerCase().includes(searchTerm.toLowerCase()),
+      student.class.name.toLowerCase().includes(searchTerm.toLowerCase())),
   );
 
   return (
@@ -272,24 +350,8 @@ export function DashboardPage() {
             )}
           </div>
           <p className="text-zinc-500 dark:text-zinc-400">
-            View student attendance and daily status.
+            Your central overview for managing attendance across the school.
           </p>
-        </div>
-        <div className="flex flex-col sm:flex-row gap-3">
-          <Link
-            to="/create-user"
-            className="py-3 px-6 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-900 dark:text-zinc-50 rounded-xl font-semibold transition-colors flex items-center justify-center gap-2 group"
-          >
-            <PlusCircle size={20} className="text-indigo-500" />
-            <span>New User</span>
-          </Link>
-          <Link
-            to="/"
-            className="py-3 px-6 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold transition-colors flex items-center justify-center gap-2 group shadow-lg shadow-indigo-600/20"
-          >
-            <Library size={20} />
-            <span>Import Users</span>
-          </Link>
         </div>
       </div>
 
@@ -305,10 +367,35 @@ export function DashboardPage() {
       ) : (
         <Card>
           <CardHeader>
-            <CardTitle>Students</CardTitle>
-            <CardDescription>
-              View attendance status and history for each student
-            </CardDescription>
+            <div className="flex justify-between items-center">
+              <div>
+                <div className="flex items-center gap-2">
+                  <CardTitle>Students</CardTitle>
+                  <Chip
+                    label={filteredStudents.length}
+                    size="small"
+                    sx={{
+                      color: "white",
+                      fontWeight: 700,
+                    }}
+                    color="primary"
+                  />
+                </div>
+                <CardDescription>
+                  View attendance status and history for each student
+                </CardDescription>
+              </div>
+              <div className="flex justify-end gap-3">
+                <Button onClick={() => navigate("")} variant="outline">
+                  <Library size={20} />
+                  <span>Import Students</span>
+                </Button>
+                <Button onClick={() => navigate("/users/create")}>
+                  <PlusCircle size={20} className="mr-2" />
+                  <span>New Student</span>
+                </Button>
+              </div>
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="relative max-w-sm">
@@ -353,6 +440,11 @@ export function DashboardPage() {
                 )}
               </TableBody>
             </Table>
+            <Pagination
+              currentPage={userPage}
+              totalPages={totalUserPages}
+              onPageChange={setUserPage}
+            />
           </CardContent>
         </Card>
       )}

@@ -41,7 +41,7 @@ export function AppLayout() {
                 size={24}
               />
               <span className="text-xl font-bold tracking-tight">
-                Student Attendance Management
+                Attendify
               </span>
             </div>
 

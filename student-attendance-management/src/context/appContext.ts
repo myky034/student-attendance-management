@@ -24,6 +24,8 @@ export interface AppContextType {
   login: (username: string, password: string) => boolean
   logout: () => void
   getAllUsers: () => User[]
+  getUserById: (userId: string) => User | undefined
+  updateUser: (userId: string, userToUpdate: User) => void
   addUser: (user: User) => void
 }
 
