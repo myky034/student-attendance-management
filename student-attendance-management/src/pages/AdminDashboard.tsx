@@ -255,7 +255,7 @@ export function AdminDashboard() {
                         {student.name}
                       </TableCell>
                       <TableCell>{student.email}</TableCell>
-                      <TableCell>{student.class}</TableCell>
+                      <TableCell>{student.class.name}</TableCell>
                       <TableCell className="text-right">
                         <AlertDialog>
                           <AlertDialogTrigger asChild>

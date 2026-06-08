@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { QrCode, Save, Trash2, Zap } from "lucide-react";
+import { QrCode, Save, Trash2 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import {
   Box,
@@ -111,21 +111,8 @@ export function QRScanner() {
       >
         <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
           <Typography variant="h4" gutterBottom fontWeight={700}>
-            QR Code Attendance
+            QR Code
           </Typography>
-          <motion.div
-            animate={{
-              scale: [1, 1.2, 1],
-              rotate: [0, 10, -10, 0],
-            }}
-            transition={{
-              duration: 2,
-              repeat: Infinity,
-              ease: "easeInOut",
-            }}
-          >
-            <Zap size={28} color="#fdcb6e" fill="#fdcb6e" />
-          </motion.div>
         </Box>
         <Typography variant="body2" color="text.secondary">
           Scan student QR codes for quick attendance marking
@@ -307,11 +294,10 @@ export function QRScanner() {
                     label={scannedStudents.length}
                     size="small"
                     sx={{
-                      background:
-                        "linear-gradient(135deg, #a8c0ff 0%, #c2e9fb 100%)",
                       color: "white",
                       fontWeight: 700,
                     }}
+                    color="primary"
                   />
                 </motion.div>
               </Box>

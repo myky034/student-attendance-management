@@ -7,6 +7,8 @@ import { AppLayout } from "../components/AppLayout";
 import { DashboardPage } from "../pages/DashboardPage";
 import { QRScanner } from "../pages/QRScanner";
 import { UserFormPage } from "../pages/UserFormPage";
+import { Students } from "../pages/admin/Students";
+import { Settings } from "../pages/admin/Settings";
 
 export const router = createBrowserRouter([
   {
@@ -24,6 +26,14 @@ export const router = createBrowserRouter([
       {
         path: "dashboard",
         Component: AdminDashboard,
+      },
+      {
+        path: "students",
+        Component: Students,
+      },
+      {
+        path: "settings",
+        Component: Settings,
       },
     ],
   },
@@ -43,9 +53,7 @@ export const router = createBrowserRouter([
         path: "users/create",
         Component: UserFormPage,
       },
-      { path: "users/edit/:userId", 
-        Component: UserFormPage 
-      },
+      { path: "users/edit/:userId", Component: UserFormPage },
     ],
   },
 ]);

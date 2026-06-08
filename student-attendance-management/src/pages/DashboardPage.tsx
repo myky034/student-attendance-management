@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import {
@@ -138,10 +138,18 @@ function StudentList({ student }: { student: StudentType }) {
           {todayAttendance ? (
             <Badge
               variant={
-                todayAttendance.status === "present" ? "default" : "destructive"
+                todayAttendance.status === "present"
+                  ? "success"
+                  : todayAttendance.status === "excused absence"
+                    ? "warning"
+                    : "danger"
               }
             >
-              {todayAttendance.status === "present" ? "Present" : "Absent"}
+              {todayAttendance.status === "present"
+                ? "Present"
+                : todayAttendance.status === "excused absence"
+                  ? "Excused Absence"
+                  : "Absent"}
             </Badge>
           ) : (
             <Badge variant="outline">Not Marked</Badge>
@@ -218,8 +226,8 @@ function StudentList({ student }: { student: StudentType }) {
                   <AlertDialogHeader>
                     <AlertDialogTitle>Delete User?</AlertDialogTitle>
                     <AlertDialogDescription>
-                      Are you sure you want to delete "{student.name}"? This action
-                      cannot be undone.
+                      Are you sure you want to delete "{student.name}"? This
+                      action cannot be undone.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
@@ -241,7 +249,7 @@ function StudentList({ student }: { student: StudentType }) {
       </TableRow>
       {open && (
         <TableRow className="bg-zinc-50/80 dark:bg-zinc-900/50">
-          <TableCell colSpan={8} className="p-0">
+          <TableCell colSpan={7} className="p-0">
             <div className="px-4 py-4">
               <p className="mb-3 text-sm font-semibold text-zinc-900 dark:text-zinc-50">
                 Attendance History
@@ -314,19 +322,24 @@ export function DashboardPage() {
   const navigate = useNavigate();
   const [userPage, setUserPage] = useState(1);
 
-  //Pagination for users
-  const totalUserPages = Math.ceil(students.length / ITEM_PER_PAGE);
-  const paginatedStudents = students.slice(
+  const filteredStudents = useMemo(() => {
+    const filtered = students.filter((student) => student.isDeleted === false);
+
+    return filtered.filter(
+      (student) =>
+        student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        student.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        student.class.name.toLowerCase().includes(searchTerm.toLowerCase()),
+    );
+  }, [students, searchTerm]);
+
+  const totalUserPages = Math.max(
+    1,
+    Math.ceil(filteredStudents.length / ITEM_PER_PAGE),
+  );
+  const paginatedStudents = filteredStudents.slice(
     (userPage - 1) * ITEM_PER_PAGE,
     userPage * ITEM_PER_PAGE,
-  );
-
-  const filteredStudents = paginatedStudents.filter(
-    (student) =>
-      student.isDeleted === false &&
-      (student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      student.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      student.class.name.toLowerCase().includes(searchTerm.toLowerCase())),
   );
 
   return (
@@ -355,7 +368,7 @@ export function DashboardPage() {
         </div>
       </div>
 
-      {students.length === 0 ? (
+      {filteredStudents.length === 0 ? (
         <div className="text-center py-20 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-3xl">
           <h2 className="text-xl font-medium text-zinc-900 dark:text-zinc-100 mb-2">
             No students found
@@ -427,14 +440,14 @@ export function DashboardPage() {
                 {filteredStudents.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={8}
+                      colSpan={7}
                       className="h-24 text-center text-zinc-500"
                     >
-                      No students match your search.
+                      No students found in the system yet.
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredStudents.map((student) => (
+                  paginatedStudents.map((student) => (
                     <StudentList key={student.id} student={student} />
                   ))
                 )}

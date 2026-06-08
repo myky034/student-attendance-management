@@ -1,6 +1,14 @@
 import { useEffect } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router";
-import { Sparkles, Crown, Shield, LogOut, LayoutDashboard } from "lucide-react";
+import {
+  Sparkles,
+  Crown,
+  Shield,
+  LogOut,
+  LayoutDashboard,
+  Users,
+  Settings,
+} from "lucide-react";
 import { Link } from "react-router";
 import { useAppContext } from "../context/useAppContext";
 
@@ -25,11 +33,11 @@ export function AdminLayout() {
   const navLinks = [
     {
       to: "/admin/dashboard",
-      label: "Admin Dashboard",
+      label: "Dashboard",
       icon: <LayoutDashboard size={20} />,
     },
-    // {to: "/students", label: "Students", icon: <Users size={20} />},
-    // {to: "/teachers", label: "Teachers", icon: <Users size={20} />},
+    { to: "/admin/students", label: "Students", icon: <Users size={20} /> },
+    { to: "/admin/settings", label: "Settings", icon: <Settings size={20} /> },
     // {to: "/classes", label: "Classes", icon: <Users size={20} />},
     // {to: "/subjects", label: "Subjects", icon: <Users size={20} />},
   ];

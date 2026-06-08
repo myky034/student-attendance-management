@@ -21,6 +21,17 @@ export interface Student {
 export interface Classes {
   id: string;
   name: string;
+  grade: Grades;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface Grades {
+  id: string;
+  name: string;
+  description: string;
+  color: string;
+  isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
