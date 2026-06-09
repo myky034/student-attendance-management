@@ -7,8 +7,8 @@ import { AppLayout } from "../components/AppLayout";
 import { DashboardPage } from "../pages/DashboardPage";
 import { QRScanner } from "../pages/QRScanner";
 import { UserFormPage } from "../pages/UserFormPage";
-import { Students } from "../pages/admin/Students";
-import { Settings } from "../pages/admin/Settings";
+import { Students } from "../pages/(admin)/Students";
+import { Settings } from "../pages/(admin)/Settings";
 
 export const router = createBrowserRouter([
   {

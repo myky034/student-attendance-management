@@ -1,7 +1,10 @@
+import { type User, type UserRole } from "./context/appContext";
+
 export interface AttendanceRecord {
   date: string;
   status: "present" | "absent" | "excused absence";
   timestamp: string;
+  createdBy: User;
 }
 
 export interface Student {
@@ -16,6 +19,7 @@ export interface Student {
   isVerified: boolean;
   isSuspended: boolean;
   isLocked: boolean;
+  role: UserRole;
 }
 
 export interface Classes {

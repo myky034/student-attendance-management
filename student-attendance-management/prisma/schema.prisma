@@ -1,0 +1,76 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  admin
+  student
+  teacher
+}
+
+enum AttendanceStatus {
+  present
+  absent
+  excused_absence
+}
+
+model Grade {
+  id          String   @id @default(cuid())
+  name        String
+  description String
+  color       String
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  classes     Class[]
+}
+
+model Class {
+  id        String   @id @default(cuid())
+  name      String
+  gradeId   String
+  grade     Grade    @relation(fields: [gradeId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  students  User[]
+}
+
+model User {
+  id          String   @id @default(cuid())
+  name        String
+  email       String   @unique
+  username    String   @unique
+  password    String   // sau này nên dùng Supabase Auth, không lưu plain text
+  role        UserRole
+  qrCode            String
+  studentAttendance AttendanceRecord[] @relation("StudentAttendance")
+  createdAttendance AttendanceRecord[] @relation("CreatedByAttendance")
+  classId           String
+  class       Class    @relation(fields: [classId], references: [id])
+  isActive    Boolean  @default(true)
+  isDeleted   Boolean  @default(false)
+  isLocked    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model AttendanceRecord {
+  id          String           @id @default(cuid())
+  date        DateTime         @db.Date
+  status      AttendanceStatus
+  timestamp   DateTime         @default(now())
+  studentId   String
+  student     User             @relation("StudentAttendance", fields: [studentId], references: [id])
+  createdById String
+  createdBy   User             @relation("CreatedByAttendance", fields: [createdById], references: [id])
+}

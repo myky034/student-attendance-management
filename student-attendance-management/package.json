@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "postinstall": "prisma generate"
   },
   "devDependencies": {
     "@emotion/react": "^11.14.0",
@@ -43,7 +44,7 @@
     "@radix-ui/react-toggle-group": "^1.1.2",
     "@radix-ui/react-tooltip": "^1.1.8",
     "@tailwindcss/vite": "^4.1.12",
-    "@types/node": "^24.12.3",
+    "@types/node": "^24.13.1",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^4.7.0",
@@ -83,5 +84,11 @@
     "typescript-eslint": "^8.59.2",
     "vaul": "^1.1.2",
     "vite": "^6.3.5"
+  },
+  "dependencies": {
+    "@prisma/client": "^7.8.0",
+    "@supabase/ssr": "^0.10.3",
+    "@supabase/supabase-js": "^2.108.0",
+    "prisma": "^7.8.0"
   }
 }

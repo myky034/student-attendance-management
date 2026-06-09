@@ -66,9 +66,7 @@ function StudentListRow({ student }: { student: Student }) {
     Math.ceil(student.attendanceRecords.length / historyPerPage),
   );
   const paginatedHistory = [...student.attendanceRecords]
-    .sort(
-      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
-    )
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
     .slice((historyPage - 1) * historyPerPage, historyPage * historyPerPage);
 
   return (
@@ -158,6 +156,7 @@ function StudentListRow({ student }: { student: Student }) {
                       <TableHead>Date</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Time</TableHead>
+                      <TableHead>Created By</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -184,6 +183,7 @@ function StudentListRow({ student }: { student: Student }) {
                           </Badge>
                         </TableCell>
                         <TableCell>{record.timestamp}</TableCell>
+                        <TableCell>{record.createdBy.name}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
