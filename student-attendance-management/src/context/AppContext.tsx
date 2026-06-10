@@ -3,7 +3,8 @@ import { AppContext, type User, type UserRole } from "./appContext.ts";
 import { initialUsers } from "../data/mockData.ts";
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [users, setUsers] = useState<User[]>(initialUsers);  const [user, setUser] = useState<User | null>(null);
+  const [users, setUsers] = useState<User[]>(initialUsers);
+  const [user, setUser] = useState<User | null>(null);
 
   const login = (username: string, password: string): boolean => {
     const foundUser = users.find(
@@ -25,10 +26,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
         isVerified: false,
         isSuspended: false,
         isLocked: false,
+        classId: foundUser.classId,
       });
       return true;
     }
     return false;
+  };
+
+  const setSessionUser = (sessionUser: User) => {
+    setUser(sessionUser);
   };
 
   const logout = () => {
@@ -37,7 +43,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const getAllUsers = () => users;
 
-  const getUserById = (userId: string) => users.find((user) => user.id === userId);
+  const getUserById = (userId: string) =>
+    users.find((user) => user.id === userId);
 
   const addUser = (userToAdd: User) => {
     const newUser: User = {
@@ -49,11 +56,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const updateUser = (userId: string, userToUpdate: User) => {
-    setUsers((prev) => prev.map((user) => user.id === userId ? userToUpdate : user));
+    setUsers((prev) =>
+      prev.map((user) => (user.id === userId ? userToUpdate : user)),
+    );
   };
 
   return (
-    <AppContext.Provider value={{ user, login, logout, getAllUsers, addUser, getUserById, updateUser }}>
+    <AppContext.Provider
+      value={{
+        user,
+        login,
+        setSessionUser,
+        logout,
+        getAllUsers,
+        addUser,
+        getUserById,
+        updateUser,
+      }}
+    >
       {children}
     </AppContext.Provider>
   );

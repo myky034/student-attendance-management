@@ -1,31 +1,80 @@
+"use client";
+
 import React, { useState } from "react";
 import { useNavigate } from "react-router";
 import { motion } from "motion/react";
-import { Zap, AlertCircle, LogIn } from "lucide-react";
+import { Zap, AlertCircle, LogIn, Eye, EyeOff } from "lucide-react";
+import { authenticateUser } from "@/lib/api/user";
 import { useAppContext } from "../context/useAppContext";
+import type { User } from "../context/appContext";
+
+function mapDbUserToSessionUser(dbUser: Awaited<ReturnType<typeof authenticateUser>>): User {
+  if (!dbUser) {
+    throw new Error("User not found");
+  }
+
+  return {
+    id: dbUser.id,
+    name: dbUser.name,
+    email: dbUser.email,
+    username: dbUser.username,
+    password: dbUser.password,
+    role: dbUser.role,
+    qrCode: dbUser.qrCode,
+    classId: dbUser.classId,
+    isActive: dbUser.isActive,
+    isDeleted: dbUser.isDeleted,
+    isLocked: dbUser.isLocked,
+    isVerified: false,
+    isSuspended: false,
+    createdAt: new Date(dbUser.createdAt),
+    updatedAt: new Date(dbUser.updatedAt),
+  };
+}
 
 export function Login() {
   const navigate = useNavigate();
-  const [username, setUserName] = useState("");
+  const { setSessionUser } = useAppContext();
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const { login } = useAppContext();
+  const [showPassword, setShowPassword] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleLogin = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleShowPassword = () => {
+    setShowPassword(!showPassword);
+  };
+
+  const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError("");
+    setIsSubmitting(true);
 
-    const success = login(username, password);
-    if (success) {
-      {
-        if (username === "admin") {
-          navigate("/admin/dashboard");
-        } else if (username === "student" || username === "teacher") {
-          navigate("/dashboard");
-        }
+    try {
+      const userData = await authenticateUser(email, password);
+
+      if (!userData) {
+        setError("Invalid email or password");
+        return;
       }
-    } else {
-      setError("Invalid username or password");
+
+      if (!userData.isActive || userData.isDeleted || userData.isLocked) {
+        setError("Your account is not active, deleted, or locked");
+        return;
+      }
+
+      setSessionUser(mapDbUserToSessionUser(userData));
+
+      if (userData.role === "admin") {
+        navigate("/admin/dashboard");
+      } else {
+        navigate("/dashboard");
+      }
+    } catch (err) {
+      console.error(err);
+      setError("Login failed. Check Supabase RLS policies for the User table.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -57,19 +106,19 @@ export function Login() {
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
               <label
-                htmlFor="username"
+                htmlFor="email"
                 className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1"
               >
-                Username
+                Email
               </label>
               <input
-                type="username"
-                id="username"
+                type="email"
+                id="email"
                 required
-                value={username}
-                onChange={(e) => setUserName(e.target.value)}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 className="w-full px-4 py-3 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50 text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-colors"
-                placeholder="username"
+                placeholder="email@example.com"
               />
             </div>
             <div>
@@ -79,15 +128,24 @@ export function Login() {
               >
                 Password
               </label>
-              <input
-                type="password"
-                id="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-3 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50 text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-colors"
-                placeholder="••••••••"
-              />
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  id="password"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50 text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-colors"
+                  placeholder="••••••••"
+                />
+                <button
+                  type="button"
+                  onClick={handleShowPassword}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 dark:text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+                >
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
             </div>
 
             {error && (
@@ -99,19 +157,19 @@ export function Login() {
 
             <button
               type="submit"
-              className="w-full mt-6 py-4 px-6 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold text-lg transition-colors flex items-center justify-center gap-2 group shadow-lg shadow-indigo-600/20"
+              disabled={isSubmitting}
+              className="w-full mt-6 py-4 px-6 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white rounded-xl font-semibold text-lg transition-colors flex items-center justify-center gap-2 group shadow-lg shadow-indigo-600/20"
             >
               <LogIn
                 size={20}
                 className="group-hover:translate-x-1 transition-transform"
               />
-              <span>Log In</span>
+              <span>{isSubmitting ? "Logging in..." : "Log In"}</span>
             </button>
           </form>
 
           <div className="mt-6 text-center text-sm text-zinc-500 dark:text-zinc-400">
-            Demo accounts: <strong>admin/admin</strong> or{" "}
-            <strong>student/student</strong> or <strong>teacher/teacher</strong>
+            Use the email and password stored in the <strong>User</strong> table.
           </div>
         </div>
       </motion.div>

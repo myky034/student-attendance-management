@@ -17,6 +17,7 @@ export const initialUsers: User[] = [
     isVerified: false,
     isSuspended: false,
     isLocked: false,
+    classId: '',
   },
   {
     name: 'Student',
@@ -33,6 +34,7 @@ export const initialUsers: User[] = [
     isVerified: false,
     isSuspended: false,
     isLocked: false,
+    classId: 'CLS001',
   },
   {
     name: 'Teacher',
@@ -49,6 +51,7 @@ export const initialUsers: User[] = [
     isVerified: false,
     isSuspended: false,
     isLocked: false,
+    classId: 'CLS001',
   },
 ];
 

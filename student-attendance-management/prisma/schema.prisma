@@ -52,10 +52,10 @@ model User {
   username    String   @unique
   password    String   // sau này nên dùng Supabase Auth, không lưu plain text
   role        UserRole
-  qrCode            String
+  qrCode      String
   studentAttendance AttendanceRecord[] @relation("StudentAttendance")
   createdAttendance AttendanceRecord[] @relation("CreatedByAttendance")
-  classId           String
+  classId     String
   class       Class    @relation(fields: [classId], references: [id])
   isActive    Boolean  @default(true)
   isDeleted   Boolean  @default(false)

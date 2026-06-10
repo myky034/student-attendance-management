@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import {
@@ -40,15 +40,14 @@ import {
 } from "lucide-react";
 import { Chip, IconButton, Menu, MenuItem } from "@mui/material";
 import { useAppContext } from "../context/useAppContext";
-import { initialStudents } from "../data/mockData";
-import type { Student as StudentType } from "../types";
 import { cn } from "../lib/utils";
 import { Link, useNavigate } from "react-router";
 import { Pagination } from "../components/ui/pagination";
+import { getStudents, type StudentRecord } from "@/lib/api/students";
 
 const ITEM_PER_PAGE = 15;
 
-function StudentList({ student }: { student: StudentType }) {
+function StudentList({ student }: { student: StudentRecord }) {
   const [open, setOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const opens = Boolean(anchorEl);
@@ -58,9 +57,9 @@ function StudentList({ student }: { student: StudentType }) {
 
   //Pagination for history
   const totalHistoryPages = Math.ceil(
-    student.attendanceRecords.length / historyPerPage,
+    student.studentAttendance.length / historyPerPage,
   );
-  const paginatedHistory = student.attendanceRecords.slice(
+  const paginatedHistory = student.studentAttendance.slice(
     (historyPage - 1) * historyPerPage,
     historyPage * historyPerPage,
   );
@@ -84,14 +83,14 @@ function StudentList({ student }: { student: StudentType }) {
   };
 
   const todayDate = new Date().toISOString().split("T")[0];
-  const todayAttendance = student.attendanceRecords.find(
+  const todayAttendance = student.studentAttendance.find(
     (r) => r.date === todayDate,
   );
 
-  const totalPresent = student.attendanceRecords.filter(
+  const totalPresent = student.studentAttendance.filter(
     (r) => r.status === "present",
   ).length;
-  const totalRecords = student.attendanceRecords.length;
+  const totalRecords = student.studentAttendance.length;
   const attendanceRate =
     totalRecords > 0 ? (totalPresent / totalRecords) * 100 : 0;
 
@@ -133,7 +132,7 @@ function StudentList({ student }: { student: StudentType }) {
           </div>
         </TableCell>
         <TableCell>{student.email}</TableCell>
-        <TableCell>{student.class.name}</TableCell>
+        <TableCell>{student.class?.name ?? "-"}</TableCell>
         <TableCell>
           {todayAttendance ? (
             <Badge
@@ -254,7 +253,7 @@ function StudentList({ student }: { student: StudentType }) {
               <p className="mb-3 text-sm font-semibold text-zinc-900 dark:text-zinc-50">
                 Attendance History
               </p>
-              {student.attendanceRecords.length > 0 ? (
+              {student.studentAttendance.length > 0 ? (
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -317,29 +316,65 @@ function StudentList({ student }: { student: StudentType }) {
 
 export function DashboardPage() {
   const [searchTerm, setSearchTerm] = useState("");
-  const [students] = useState(initialStudents);
+  const [students, setStudents] = useState<StudentRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState("");
   const { user } = useAppContext();
   const navigate = useNavigate();
-  const [userPage, setUserPage] = useState(1);
+  const [studentPage, setStudentPage] = useState(1);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const fetchStudents = async () => {
+      setLoading(true);
+      setFetchError("");
+
+      try {
+        const classId =
+          user.role === "teacher" && user.classId ? user.classId : undefined;
+
+        if (user.role === "teacher" && !user.classId) {
+          setStudents([]);
+          setFetchError("Teacher chưa được gán lớp (classId). Vui lòng cập nhật trong Settings.");
+          return;
+        }
+
+        const data = await getStudents({ classId });
+        setStudents(data);
+      } catch (err) {
+        console.error(err);
+        setStudents([]);
+        setFetchError(
+          "Không tải được danh sách học sinh. Kiểm tra RLS policy trên Supabase hoặc Console.",
+        );
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchStudents();
+  }, [user]);
 
   const filteredStudents = useMemo(() => {
-    const filtered = students.filter((student) => student.isDeleted === false);
+    if (!searchTerm.trim()) return students;
 
-    return filtered.filter(
+    const q = searchTerm.toLowerCase();
+    return students.filter(
       (student) =>
-        student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        student.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        student.class.name.toLowerCase().includes(searchTerm.toLowerCase()),
+        student.name.toLowerCase().includes(q) ||
+        student.email.toLowerCase().includes(q) ||
+        (student.class?.name.toLowerCase().includes(q) ?? false),
     );
   }, [students, searchTerm]);
 
-  const totalUserPages = Math.max(
+  const totalStudentPages = Math.max(
     1,
     Math.ceil(filteredStudents.length / ITEM_PER_PAGE),
   );
   const paginatedStudents = filteredStudents.slice(
-    (userPage - 1) * ITEM_PER_PAGE,
-    userPage * ITEM_PER_PAGE,
+    (studentPage - 1) * ITEM_PER_PAGE,
+    studentPage * ITEM_PER_PAGE,
   );
 
   return (
@@ -368,13 +403,23 @@ export function DashboardPage() {
         </div>
       </div>
 
-      {filteredStudents.length === 0 ? (
+      {loading ? (
+        <div className="text-center py-20 text-zinc-500">
+          Đang tải danh sách học sinh...
+        </div>
+      ) : fetchError ? (
+        <div className="text-center py-20 border-2 border-dashed border-red-200 dark:border-red-800 rounded-3xl px-4">
+          <p className="text-red-600 dark:text-red-400">{fetchError}</p>
+        </div>
+      ) : students.length === 0 ? (
         <div className="text-center py-20 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-3xl">
           <h2 className="text-xl font-medium text-zinc-900 dark:text-zinc-100 mb-2">
             No students found
           </h2>
           <p className="text-zinc-500 dark:text-zinc-400 max-w-sm mx-auto">
-            There are no students in the system yet.
+            {user?.role === "teacher"
+              ? `Không có học sinh role "student" cùng classId: ${user.classId}. Kiểm tra bảng User trên Supabase.`
+              : "There are no students in the system yet."}
           </p>
         </div>
       ) : (
@@ -385,7 +430,7 @@ export function DashboardPage() {
                 <div className="flex items-center gap-2">
                   <CardTitle>Students</CardTitle>
                   <Chip
-                    label={filteredStudents.length}
+                    label={students.length}
                     size="small"
                     sx={{
                       color: "white",
@@ -437,7 +482,7 @@ export function DashboardPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredStudents.length === 0 ? (
+                {students.length === 0 ? (
                   <TableRow>
                     <TableCell
                       colSpan={7}
@@ -454,9 +499,9 @@ export function DashboardPage() {
               </TableBody>
             </Table>
             <Pagination
-              currentPage={userPage}
-              totalPages={totalUserPages}
-              onPageChange={setUserPage}
+              currentPage={studentPage}
+              totalPages={totalStudentPages}
+              onPageChange={setStudentPage}
             />
           </CardContent>
         </Card>

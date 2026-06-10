@@ -9,7 +9,13 @@ import { Input } from "../components/ui/input";
 import { QRCodeSVG } from "qrcode.react";
 import { toast } from "sonner";
 import { Label } from "../components/ui/lable";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../components/ui/select";
 import { initialClasses, initialStudents } from "../data/mockData";
 
 const generateQRCode = () => {
@@ -23,7 +29,9 @@ export const UserFormPage = () => {
   const { addUser, updateUser } = useAppContext();
   const navigate = useNavigate();
   const { userId } = useParams();
-  const existingStudent = initialStudents.find((student) => student.id === userId);
+  const existingStudent = initialStudents.find(
+    (student) => student.id === userId,
+  );
   const [formData, setFormData] = useState({
     name: existingStudent?.name || "",
     email: existingStudent?.email || "",
@@ -198,10 +206,7 @@ export const UserFormPage = () => {
                 Code: {formData.qrCode}
               </Typography>
               {!isEditMode && (
-                <Button
-                  variant= "default"
-                  onClick={handleRefreshQRCode}
-                >
+                <Button variant="default" onClick={handleRefreshQRCode}>
                   <RefreshCw size={16} />
                   <span>Refresh QR Code</span>
                 </Button>
@@ -209,61 +214,57 @@ export const UserFormPage = () => {
             </Paper>
 
             <div className="space-y-2">
-                <Label htmlFor="name">Full Name</Label>
-                <Input
-                  id="name"
-                  value={formData.name}
-                  onChange={handleChange("name")}
-                  placeholder="Enter full name"
-                  className={errors.name ? "border-red-500" : ""}
-                />
-                {errors.name && (
-                  <p className="text-sm text-red-500">{errors.name}</p>
-                )}
-              </div>
+              <Label htmlFor="name">Full Name</Label>
+              <Input
+                id="name"
+                value={formData.name}
+                onChange={handleChange("name")}
+                placeholder="Enter full name"
+                className={errors.name ? "border-red-500" : ""}
+              />
+              {errors.name && (
+                <p className="text-sm text-red-500">{errors.name}</p>
+              )}
+            </div>
 
             <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  value={formData.email}
-                  onChange={handleChange("email")}
-                  placeholder="Enter email"
-                  className={errors.email ? "border-red-500" : ""}
-                />
-                {errors.email && (
-                  <p className="text-sm text-red-500">{errors.email}</p>
-                )}
-              </div>
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                value={formData.email}
+                onChange={handleChange("email")}
+                placeholder="Enter email"
+                className={errors.email ? "border-red-500" : ""}
+              />
+              {errors.email && (
+                <p className="text-sm text-red-500">{errors.email}</p>
+              )}
+            </div>
 
             <div className="space-y-2">
-                <Label htmlFor="class">Class</Label>
-                <Select value={formData.class} onValueChange={handleClassChange}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a class" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {initialClasses.map((classItem) => (
-                      <SelectItem key={classItem.id} value={classItem.id}>{classItem.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                  </Select>
-                {errors.class && (
-                  <p className="text-sm text-red-500">{errors.class}</p>
-                )}
-              </div>
+              <Label htmlFor="class">Class</Label>
+              <Select value={formData.class} onValueChange={handleClassChange}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a class" />
+                </SelectTrigger>
+                <SelectContent>
+                  {initialClasses.map((classItem) => (
+                    <SelectItem key={classItem.id} value={classItem.id}>
+                      {classItem.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {errors.class && (
+                <p className="text-sm text-red-500">{errors.class}</p>
+              )}
+            </div>
 
             <div className="flex w-full justify-end gap-4 pt-2">
-              <Button
-                variant="outline"
-                onClick={handleClose}
-              >
+              <Button variant="outline" onClick={handleClose}>
                 Cancel
               </Button>
-              <Button
-                variant="default"
-                type="submit"
-              >
+              <Button variant="default" type="submit">
                 {isEditMode ? "Update Student" : "Add Student"}
               </Button>
             </div>
