@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { QrCode, Save, Trash2 } from "lucide-react";
+import { QrCode, Trash2 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import {
   Box,
@@ -21,19 +21,62 @@ import {
   Avatar,
 } from "@mui/material";
 import { toast } from "sonner";
-import { initialStudents } from "../data/mockData";
+import { getStudents, type StudentRecord } from "@/lib/api/students";
+import { saveAttendanceRecord } from "@/lib/api/attendancerecord";
+import {
+  formatVietnamTime,
+  getVietnamDateString,
+  getVietnamTimestampString,
+} from "@/lib/datetime";
+import { useAppContext } from "../context/useAppContext";
 
 const MotionBox = motion.create(Box);
 const MotionCard = motion.create(Card);
 const MotionTableRow = motion.create(TableRow);
 
 export function QRScanner() {
-  const [students] = useState(initialStudents);
+  const [students, setStudents] = useState<StudentRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [showDemoQR, setShowDemoQR] = useState(false);
   const [manualId, setManualId] = useState("");
   const [scannedStudents, setScannedStudents] = useState<
     { studentId: string; timestamp: string }[]
   >([]);
+  const { user } = useAppContext();
+
+  const loadStudents = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const classId =
+        user.role === "teacher" && user.classId ? user.classId : undefined;
+      if (user.role === "teacher" && !user.classId) {
+        setStudents([]);
+        setError("Teacher not assigned to a class. Please update in Settings.");
+        return;
+      }
+      const data = await getStudents({ classId });
+      setStudents(data);
+    } catch (error) {
+      console.error("Failed to fetch students:", error);
+      setError("Failed to fetch students");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const fetchStudents = async () => {
+      await loadStudents();
+    };
+    fetchStudents();
+  }, []);
+
+  const unscannedStudents = useMemo(() => {
+    const scannedIds = new Set(scannedStudents.map((entry) => entry.studentId));
+    return students.filter((student) => !scannedIds.has(student.id));
+  }, [students, scannedStudents]);
 
   const handleScan = (studentId: string) => {
     const foundStudent = students.find((s) => s.id === studentId);
@@ -42,17 +85,19 @@ export function QRScanner() {
       return;
     }
 
-    const alreadyScanned = scannedStudents.find(
-      (s) => s.studentId === studentId,
+    const alreadyScanned = scannedStudents.some(
+      (entry) => entry.studentId === studentId,
     );
     if (alreadyScanned) {
       toast.warning("Student already scanned");
       return;
     }
 
-    const timestamp = new Date().toLocaleTimeString();
-    setScannedStudents([...scannedStudents, { studentId, timestamp }]);
-    toast.success(`Scanned ${foundStudent.name} at ${timestamp}`);
+    const timestamp = getVietnamTimestampString();
+    setScannedStudents((prev) => [...prev, { studentId, timestamp }]);
+    toast.success(
+      `Scanned ${foundStudent.name} at ${formatVietnamTime(timestamp)}`,
+    );
   };
 
   const handleManualEntry = (e: React.FormEvent<HTMLFormElement>) => {
@@ -61,31 +106,84 @@ export function QRScanner() {
       toast.error("Please enter a student ID");
       return;
     }
-    const foundStudent = students.find((s) => s.id === manualId);
+
+    const studentId = manualId.trim();
+    const foundStudent = students.find((s) => s.id === studentId);
     if (!foundStudent) {
       toast.error("Student not found");
       return;
     }
-    toast.success(`Scanned ${foundStudent.name}`);
+
+    handleScan(studentId);
+    setManualId("");
   };
 
-  const handleCompleteAttendance = () => {
+  const handleCompleteAttendance = async () => {
     if (scannedStudents.length === 0) {
       toast.error("No students scanned");
       return;
     }
 
-    setScannedStudents([]);
-    toast.success(
-      `Completed attendance for ${scannedStudents.length} students`,
+    if (students.length === 0) {
+      toast.error("No students in class");
+      return;
+    }
+
+    const today = getVietnamDateString();
+    const absentTimestamp = getVietnamTimestampString();
+    const scannedById = new Map(
+      scannedStudents.map((entry) => [entry.studentId, entry]),
     );
+
+    let presentCount = 0;
+    let absentCount = 0;
+    let errorCount = 0;
+
+    for (const student of students) {
+      const scanned = scannedById.get(student.id);
+
+      try {
+        await saveAttendanceRecord({
+          studentId: student.id,
+          date: today,
+          status: scanned ? "present" : "absent",
+          timestamp: scanned ? scanned.timestamp : absentTimestamp,
+          createdById: user.id,
+        });
+
+        if (scanned) {
+          presentCount++;
+        } else {
+          absentCount++;
+        }
+      } catch (error) {
+        console.error("Failed to save attendance record:", error);
+        errorCount++;
+        toast.error(`Failed to save attendance for ${student.name}`);
+      }
+    }
+
+    setScannedStudents([]);
+
+    if (errorCount === 0) {
+      toast.success(
+        `Attendance completed: ${presentCount} present, ${absentCount} absent`,
+      );
+    } else if (presentCount + absentCount > 0) {
+      toast.warning(
+        `Saved ${presentCount + absentCount} record(s), ${errorCount} failed`,
+      );
+    } else {
+      toast.error("Could not save any attendance records");
+    }
   };
 
   const handleRemoveStudent = (studentId: string) => {
-    setScannedStudents(
-      scannedStudents.filter((s) => s.studentId !== studentId),
+    const student = students.find((s) => s.id === studentId);
+    setScannedStudents((prev) =>
+      prev.filter((entry) => entry.studentId !== studentId),
     );
-    toast.success(`Removed student ${studentId}`);
+    toast.success(`Removed ${student?.name ?? studentId} from scanned list`);
   };
 
   const handleClearAll = () => {
@@ -109,12 +207,45 @@ export function QRScanner() {
         transition={{ duration: 0.4 }}
         sx={{ mb: 4 }}
       >
-        <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-          <Typography variant="h4" gutterBottom fontWeight={700}>
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 2,
+            flexWrap: "wrap",
+          }}
+        >
+          <Typography variant="h4" fontWeight={700}>
             QR Code
           </Typography>
+          <AnimatePresence>
+            {scannedStudents.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                transition={{ duration: 0.2 }}
+              >
+                <motion.div
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <Button
+                    variant="contained"
+                    size="medium"
+                    onClick={handleCompleteAttendance}
+                    className="py-2.5 px-6 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-lg font-medium hover:bg-zinc-800 dark:hover:bg-zinc-200 inline-flex items-center gap-2"
+                  >
+                    Complete Attendance ({scannedStudents.length} present,{" "}
+                    {unscannedStudents.length} absent)
+                  </Button>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </Box>
-        <Typography variant="body2" color="text.secondary">
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
           Scan student QR codes for quick attendance marking
         </Typography>
       </MotionBox>
@@ -188,46 +319,76 @@ export function QRScanner() {
                         gap: 2,
                       }}
                     >
-                      {students.map((student, idx) => (
+                      {loading ? (
                         <motion.div
-                          key={student.id}
                           initial={{ opacity: 0, scale: 0.8 }}
                           animate={{ opacity: 1, scale: 1 }}
-                          transition={{ delay: idx * 0.05, duration: 0.3 }}
+                          transition={{ duration: 0.3 }}
                         >
-                          <MotionBox
-                            onClick={() => handleScan(student.id)}
-                            whileHover={{ scale: 1.05, y: -4 }}
-                            whileTap={{ scale: 0.95 }}
-                            sx={{
-                              cursor: "pointer",
-                              p: 1.5,
-                              border: "2px solid #e0e0e0",
-                              borderRadius: 2,
-                              transition: "all 0.2s ease",
-                              "&:hover": {
-                                bgcolor: "#f5f5f5",
-                                borderColor: "#a8c0ff",
-                                boxShadow:
-                                  "0 4px 12px rgba(168, 192, 255, 0.3)",
-                              },
-                            }}
+                          <Typography variant="body2" color="text.secondary">
+                            Loading...
+                          </Typography>
+                        </motion.div>
+                      ) : error ? (
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.8 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ duration: 0.3 }}
+                        >
+                          <Typography variant="body2" color="text.secondary">
+                            {error}
+                          </Typography>
+                        </motion.div>
+                      ) : unscannedStudents.length === 0 ? (
+                        <Typography variant="body2" color="text.secondary">
+                          All students have been scanned
+                        </Typography>
+                      ) : (
+                        unscannedStudents.map((student, idx) => (
+                          <motion.div
+                            key={student.id}
+                            initial={{ opacity: 0, scale: 0.8 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ delay: idx * 0.05, duration: 0.3 }}
                           >
-                            <QRCodeSVG value={student.id} size={80} />
-                            <Typography
-                              variant="caption"
+                            <MotionBox
+                              onClick={() => handleScan(student.id)}
+                              whileHover={{ scale: 1.05, y: -4 }}
+                              whileTap={{ scale: 0.95 }}
                               sx={{
-                                display: "block",
-                                mt: 1,
-                                textAlign: "center",
-                                fontWeight: 600,
+                                cursor: "pointer",
+                                p: 1.5,
+                                border: "2px solid #e0e0e0",
+                                borderRadius: 2,
+                                transition: "all 0.2s ease",
+                                "&:hover": {
+                                  bgcolor: "#f5f5f5",
+                                  borderColor: "#a8c0ff",
+                                  boxShadow:
+                                    "0 4px 12px rgba(168, 192, 255, 0.3)",
+                                },
+                                height: "100%",
+                                display: "flex",
+                                flexDirection: "column",
+                                alignItems: "center",
                               }}
                             >
-                              {student.name.split(" ")[0]}
-                            </Typography>
-                          </MotionBox>
-                        </motion.div>
-                      ))}
+                              <QRCodeSVG value={student.id} size={80} />
+                              <Typography
+                                variant="caption"
+                                sx={{
+                                  display: "block",
+                                  mt: 1,
+                                  textAlign: "center",
+                                  fontWeight: 600,
+                                }}
+                              >
+                                {student.name}
+                              </Typography>
+                            </MotionBox>
+                          </motion.div>
+                        ))
+                      )}
                     </Box>
                   </Box>
                 </motion.div>
@@ -444,7 +605,7 @@ export function QRScanner() {
                                 </TableCell>
                                 <TableCell>
                                   <Chip
-                                    label={entry.timestamp}
+                                    label={formatVietnamTime(entry.timestamp)}
                                     size="small"
                                     sx={{
                                       background:
@@ -486,41 +647,6 @@ export function QRScanner() {
           </CardContent>
         </MotionCard>
       </Box>
-
-      <AnimatePresence>
-        {scannedStudents.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 20 }}
-            transition={{ duration: 0.3 }}
-          >
-            <Box
-              sx={{
-                mt: 3,
-                display: "flex",
-                gap: 2,
-                justifyContent: "flex-end",
-              }}
-            >
-              <motion.div
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-              >
-                <Button
-                  variant="contained"
-                  size="medium"
-                  startIcon={<Save size={20} />}
-                  onClick={handleCompleteAttendance}
-                  className="py-2.5 px-6 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-lg font-medium hover:bg-zinc-800 dark:hover:bg-zinc-200 inline-flex items-center gap-2"
-                >
-                  Complete Attendance ({scannedStudents.length} students)
-                </Button>
-              </motion.div>
-            </Box>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </MotionBox>
   );
 }

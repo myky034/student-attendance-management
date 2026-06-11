@@ -1,7 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
-import { useAppContext } from "../context/useAppContext";
-import type { UserRole } from "../context/appContext";
 import { ArrowLeft, RefreshCw } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Paper, Box, Typography } from "@mui/material";
@@ -10,43 +8,78 @@ import { QRCodeSVG } from "qrcode.react";
 import { toast } from "sonner";
 import { Label } from "../components/ui/lable";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../components/ui/select";
-import { initialClasses, initialStudents } from "../data/mockData";
+  getStudentById,
+  saveStudent,
+  type StudentRecord,
+} from "../lib/api/students";
+import { useAppContext } from "../context/useAppContext";
 
+/**
+ * Generate a random QR code
+ * @returns {string} The generated QR code
+ */
 const generateQRCode = () => {
   const timestamp = Date.now();
   const randomString = Math.random().toString(36).substring(2, 15);
-  const qrCode = `STU-${timestamp}-${randomString}`.toUpperCase();
-  return qrCode;
+  return `GXTD-${timestamp}-${randomString}`.toUpperCase();
 };
 
 export const UserFormPage = () => {
-  const { addUser, updateUser } = useAppContext();
   const navigate = useNavigate();
   const { userId } = useParams();
-  const existingStudent = initialStudents.find(
-    (student) => student.id === userId,
+  const { user } = useAppContext();
+  const isEditMode = Boolean(userId);
+
+  const [existingStudent, setExistingStudent] = useState<StudentRecord | null>(
+    null,
   );
+  const [loading, setLoading] = useState(isEditMode);
+  const [submitting, setSubmitting] = useState(false);
   const [formData, setFormData] = useState({
-    name: existingStudent?.name || "",
-    email: existingStudent?.email || "",
+    name: "",
+    email: "",
     username: "",
     password: "",
-    role: "student",
-    qrCode: existingStudent?.qrCode || generateQRCode(),
-    class: existingStudent?.class.id ?? "",
+    qrCode: generateQRCode(),
   });
   const [errors, setErrors] = useState({
     name: "",
     email: "",
-    class: "",
+    username: "",
   });
-  const isEditMode = !!existingStudent;
+
+  useEffect(() => {
+    if (!userId) return;
+
+    let cancelled = false;
+    //setLoading(true);
+
+    getStudentById(userId)
+      .then((student) => {
+        if (cancelled) return;
+        setExistingStudent(student);
+        if (student) {
+          setFormData({
+            name: student.name,
+            email: student.email,
+            username: student.username,
+            password: "",
+            qrCode: student.qrCode,
+          });
+        }
+      })
+      .catch((error) => {
+        console.error(error);
+        if (!cancelled) toast.error("Failed to load student");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
 
   const handleRefreshQRCode = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
@@ -60,16 +93,11 @@ export const UserFormPage = () => {
       setErrors((prev) => ({ ...prev, [key]: "" }));
     };
 
-  const handleClassChange = (value: string) => {
-    setFormData((prev) => ({ ...prev, class: value }));
-    setErrors((prev) => ({ ...prev, class: "" }));
-  };
-
   const validateForm = () => {
     const newErrors = {
       name: "",
       email: "",
-      class: "",
+      username: "",
     };
 
     if (!formData.name.trim()) {
@@ -80,76 +108,71 @@ export const UserFormPage = () => {
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
       newErrors.email = "Invalid email format";
     }
-    if (!formData.class.trim()) {
-      newErrors.class = "Class is required";
-    }
+
     return newErrors;
   };
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+
+    if (!user?.classId) {
+      toast.error("Your account is not assigned to a class");
+      return;
+    }
+
     const newErrors = validateForm();
     setErrors(newErrors);
-    if (Object.values(newErrors).every((error) => error === "")) {
-      if (isEditMode) {
-        updateUser(userId ?? "", {
-          name: formData.name,
-          email: formData.email,
-          username: formData.username,
-          password: formData.password,
-          role: formData.role as UserRole,
-          id: userId ?? "",
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          qrCode: formData.qrCode,
-          isActive: true,
-          isDeleted: false,
-          isVerified: false,
-          isSuspended: false,
-          isLocked: false,
-        });
-        toast.success("Student updated successfully");
-        handleClose();
-      } else {
-        addUser({
-          name: formData.name,
-          email: formData.email,
-          username: formData.username,
-          password: formData.password,
-          role: formData.role as UserRole,
-          id: crypto.randomUUID(),
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          qrCode: formData.qrCode,
-          isActive: true,
-          isDeleted: false,
-          isVerified: false,
-          isSuspended: false,
-          isLocked: false,
-        });
-        toast.success("Student added successfully");
-        handleClose();
-      }
+    if (!Object.values(newErrors).every((error) => error === "")) {
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      await saveStudent({
+        id: isEditMode ? userId : undefined,
+        name: formData.name.trim(),
+        email: formData.email.trim(),
+        username: formData.username.trim(),
+        qrCode: formData.qrCode,
+        classId: user.classId,
+      });
+
+      toast.success(
+        isEditMode && existingStudent
+          ? "Student updated successfully"
+          : "Student created successfully",
+      );
+      handleClose();
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to save student");
+    } finally {
+      setSubmitting(false);
     }
   };
 
   const handleClose = () => {
     navigate("/dashboard");
-    setFormData({
-      name: "",
-      email: "",
-      username: "",
-      password: "",
-      role: "student",
-      qrCode: generateQRCode(),
-      class: "",
-    });
-    setErrors({
-      name: "",
-      email: "",
-      class: "",
-    });
   };
+
+  if (loading) {
+    return (
+      <p className="text-sm text-zinc-500 dark:text-zinc-400">
+        Loading student...
+      </p>
+    );
+  }
+
+  if (isEditMode && !existingStudent) {
+    return (
+      <div>
+        <p className="text-sm text-red-500 mb-4">Student not found.</p>
+        <Button variant="outline" onClick={handleClose}>
+          Back to dashboard
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -242,30 +265,29 @@ export const UserFormPage = () => {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="class">Class</Label>
-              <Select value={formData.class} onValueChange={handleClassChange}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a class" />
-                </SelectTrigger>
-                <SelectContent>
-                  {initialClasses.map((classItem) => (
-                    <SelectItem key={classItem.id} value={classItem.id}>
-                      {classItem.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {errors.class && (
-                <p className="text-sm text-red-500">{errors.class}</p>
+              <Label htmlFor="username">Username</Label>
+              <Input
+                id="username"
+                value={formData.username}
+                onChange={handleChange("username")}
+                placeholder="Enter username"
+                className={errors.username ? "border-red-500" : ""}
+              />
+              {errors.username && (
+                <p className="text-sm text-red-500">{errors.username}</p>
               )}
             </div>
 
             <div className="flex w-full justify-end gap-4 pt-2">
-              <Button variant="outline" onClick={handleClose}>
+              <Button variant="outline" type="button" onClick={handleClose}>
                 Cancel
               </Button>
-              <Button variant="default" type="submit">
-                {isEditMode ? "Update Student" : "Add Student"}
+              <Button variant="default" type="submit" disabled={submitting}>
+                {submitting
+                  ? "Saving..."
+                  : isEditMode
+                    ? "Update Student"
+                    : "Add Student"}
               </Button>
             </div>
           </div>

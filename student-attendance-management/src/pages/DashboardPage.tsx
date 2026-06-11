@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import {
@@ -40,20 +40,64 @@ import {
 } from "lucide-react";
 import { Chip, IconButton, Menu, MenuItem } from "@mui/material";
 import { useAppContext } from "../context/useAppContext";
+import type { User } from "../context/appContext";
 import { cn } from "../lib/utils";
 import { Link, useNavigate } from "react-router";
 import { Pagination } from "../components/ui/pagination";
-import { getStudents, type StudentRecord } from "@/lib/api/students";
+import {
+  getStudents,
+  type StudentRecord,
+  deleteStudentById,
+} from "@/lib/api/students";
+import { formatVietnamTime, getVietnamDateString } from "@/lib/datetime";
+import { toast } from "sonner";
 
 const ITEM_PER_PAGE = 15;
 
-function StudentList({ student }: { student: StudentRecord }) {
+type StudentsFetchResult = {
+  students: StudentRecord[];
+  error: string;
+};
+
+async function fetchStudentsForUser(user: User): Promise<StudentsFetchResult> {
+  if (user.role === "teacher" && !user.classId) {
+    return {
+      students: [],
+      error:
+        "Teacher chưa được gán lớp (classId). Vui lòng cập nhật trong Settings.",
+    };
+  }
+
+  const classId =
+    user.role === "teacher" && user.classId ? user.classId : undefined;
+
+  try {
+    const students = await getStudents({ classId });
+    return { students, error: "" };
+  } catch (err) {
+    console.error(err);
+    return {
+      students: [],
+      error:
+        "Không tải được danh sách học sinh. Kiểm tra RLS policy trên Supabase hoặc Console.",
+    };
+  }
+}
+
+function StudentList({
+  student,
+  onDeleted,
+}: {
+  student: StudentRecord;
+  onDeleted: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const opens = Boolean(anchorEl);
   const [historyPage, setHistoryPage] = useState(1);
   const historyPerPage = 5;
   const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
 
   //Pagination for history
   const totalHistoryPages = Math.ceil(
@@ -79,10 +123,24 @@ function StudentList({ student }: { student: StudentRecord }) {
   };
 
   const handleDelete = () => {
-    console.log("Delete");
+    setLoading(true);
+    handleClose();
+    deleteStudentById(student.id)
+      .then(() => {
+        toast.success("Student deleted successfully");
+        onDeleted();
+      })
+      .catch((error) => {
+        console.error("Failed to delete student", error);
+        toast.error("Failed to delete student: " + error.message);
+      })
+      .finally(() => {
+        setLoading(false);
+        setOpen(false);
+      });
   };
 
-  const todayDate = new Date().toISOString().split("T")[0];
+  const todayDate = getVietnamDateString();
   const todayAttendance = student.studentAttendance.find(
     (r) => r.date === todayDate,
   );
@@ -96,219 +154,231 @@ function StudentList({ student }: { student: StudentRecord }) {
 
   return (
     <>
-      <TableRow className="hover:bg-muted/50">
-        <TableCell className="w-10">
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="size-8"
-            onClick={() => setOpen(!open)}
-            aria-expanded={open}
-            aria-label={`Toggle attendance history for ${student.name}`}
-          >
-            <ChevronDown
-              size={16}
-              className={cn(
-                "transition-transform duration-200",
-                open && "rotate-180",
-              )}
-            />
-          </Button>
-        </TableCell>
-        <TableCell>
-          <div className="flex items-center gap-2">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-indigo-200 to-sky-200 text-sm font-semibold text-indigo-800 dark:from-indigo-900 dark:to-sky-900 dark:text-indigo-100">
-              {student.name.charAt(0)}
-            </div>
-            <div>
-              <p className="font-medium text-zinc-900 dark:text-zinc-50">
-                {student.name}
-              </p>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                ID: {student.id}
-              </p>
-            </div>
-          </div>
-        </TableCell>
-        <TableCell>{student.email}</TableCell>
-        <TableCell>{student.class?.name ?? "-"}</TableCell>
-        <TableCell>
-          {todayAttendance ? (
-            <Badge
-              variant={
-                todayAttendance.status === "present"
-                  ? "success"
-                  : todayAttendance.status === "excused absence"
-                    ? "warning"
-                    : "danger"
-              }
-            >
-              {todayAttendance.status === "present"
-                ? "Present"
-                : todayAttendance.status === "excused absence"
-                  ? "Excused Absence"
-                  : "Absent"}
-            </Badge>
-          ) : (
-            <Badge variant="outline">Not Marked</Badge>
-          )}
-        </TableCell>
-        <TableCell>
-          <div className="flex items-center gap-2 min-w-[120px]">
-            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800">
-              <div
-                className="h-full rounded-full transition-all duration-500"
-                style={{
-                  width: `${attendanceRate}%`,
-                  background:
-                    attendanceRate >= 75
-                      ? "linear-gradient(90deg, #84fab0 0%, #8fd3f4 100%)"
-                      : attendanceRate >= 50
-                        ? "linear-gradient(90deg, #ffeaa7 0%, #fdcb6e 100%)"
-                        : "linear-gradient(90deg, #ffa8b5 0%, #ffd3a5 100%)",
-                }}
-              />
-            </div>
-            <span className="text-sm font-semibold tabular-nums">
-              {attendanceRate.toFixed(1)}%
-            </span>
-          </div>
-        </TableCell>
-        <TableCell className="text-right">
-          <div className="flex items-center justify-end gap-1">
-            <Link
-              className="inline-flex size-8 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
-              to={`/student/${student.id}`}
-            >
-              <Eye size={16} />
-            </Link>
-            <IconButton
-              aria-label="more"
-              id="long-button"
-              aria-controls={opens ? "long-menu" : undefined}
-              aria-expanded={opens}
-              aria-haspopup="true"
-              onClick={handleClick}
-            >
-              <MoreHorizontal size={16} />{" "}
-            </IconButton>
-            <Menu
-              id="long-menu"
-              anchorEl={anchorEl}
-              open={opens}
-              onClose={handleClose}
-              slotProps={{
-                paper: {
-                  style: {
-                    maxHeight: 48 * 4.5,
-                    width: "20ch",
-                  },
-                },
-                list: {
-                  "aria-labelledby": "long-button",
-                },
-              }}
-            >
-              <MenuItem key="Edit" onClick={handleEdit}>
-                <Edit size={16} className="mr-2" />
-                Edit
-              </MenuItem>
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <MenuItem key="Delete" onClick={handleDelete}>
-                    <Trash2 size={16} className="mr-2" />
-                    Delete
-                  </MenuItem>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Delete User?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Are you sure you want to delete "{student.name}"? This
-                      action cannot be undone.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel onClick={handleClose}>
-                      Cancel
-                    </AlertDialogCancel>
-                    <AlertDialogAction
-                      onClick={handleDelete}
-                      className="bg-red-600 hover:bg-red-700"
-                    >
-                      Delete
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            </Menu>
-          </div>
-        </TableCell>
-      </TableRow>
-      {open && (
-        <TableRow className="bg-zinc-50/80 dark:bg-zinc-900/50">
-          <TableCell colSpan={7} className="p-0">
-            <div className="px-4 py-4">
-              <p className="mb-3 text-sm font-semibold text-zinc-900 dark:text-zinc-50">
-                Attendance History
-              </p>
-              {student.studentAttendance.length > 0 ? (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Time</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {paginatedHistory
-                      .sort(
-                        (a, b) =>
-                          new Date(b.date).getTime() -
-                          new Date(a.date).getTime(),
-                      )
-                      .map((record) => (
-                        <TableRow key={`${record.date}-${record.status}`}>
-                          <TableCell>
-                            {new Date(record.date).toLocaleDateString()}
-                          </TableCell>
-                          <TableCell>
-                            <Badge
-                              variant={
-                                record.status === "present"
-                                  ? "success"
-                                  : record.status === "excused absence"
-                                    ? "warning"
-                                    : "danger"
-                              }
-                            >
-                              {record.status === "present"
-                                ? "Present"
-                                : record.status === "excused absence"
-                                  ? "Excused Absence"
-                                  : "Absent"}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>{record.timestamp}</TableCell>
-                        </TableRow>
-                      ))}
-                  </TableBody>
-                </Table>
-              ) : (
-                <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                  No attendance records yet
-                </p>
-              )}
-              <Pagination
-                currentPage={historyPage}
-                totalPages={totalHistoryPages}
-                onPageChange={setHistoryPage}
-              />
-            </div>
+      {loading ? (
+        <TableRow>
+          <TableCell colSpan={7} className="h-24 text-center text-zinc-500">
+            Loading...
           </TableCell>
         </TableRow>
+      ) : (
+        <>
+          <TableRow className="hover:bg-muted/50">
+            <TableCell className="w-10">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-8"
+                onClick={() => setOpen(!open)}
+                aria-expanded={open}
+                aria-label={`Toggle attendance history for ${student.name}`}
+              >
+                <ChevronDown
+                  size={16}
+                  className={cn(
+                    "transition-transform duration-200",
+                    open && "rotate-180",
+                  )}
+                />
+              </Button>
+            </TableCell>
+            <TableCell>
+              <div className="flex items-center gap-2">
+                <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-indigo-200 to-sky-200 text-sm font-semibold text-indigo-800 dark:from-indigo-900 dark:to-sky-900 dark:text-indigo-100">
+                  {student.name.charAt(0)}
+                </div>
+                <div>
+                  <p className="font-medium text-zinc-900 dark:text-zinc-50">
+                    {student.name}
+                  </p>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                    ID: {student.id}
+                  </p>
+                </div>
+              </div>
+            </TableCell>
+            <TableCell>{student.email}</TableCell>
+            <TableCell>{student.class?.name ?? "-"}</TableCell>
+            <TableCell>
+              {todayAttendance ? (
+                <Badge
+                  variant={
+                    todayAttendance.status === "present"
+                      ? "success"
+                      : todayAttendance.status === "excused absence"
+                        ? "warning"
+                        : "danger"
+                  }
+                >
+                  {todayAttendance.status === "present"
+                    ? "Present"
+                    : todayAttendance.status === "excused absence"
+                      ? "Excused Absence"
+                      : "Absent"}
+                </Badge>
+              ) : (
+                <Badge variant="outline">Not Marked</Badge>
+              )}
+            </TableCell>
+            <TableCell>
+              <div className="flex items-center gap-2 min-w-[120px]">
+                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800">
+                  <div
+                    className="h-full rounded-full transition-all duration-500"
+                    style={{
+                      width: `${attendanceRate}%`,
+                      background:
+                        attendanceRate >= 75
+                          ? "linear-gradient(90deg, #84fab0 0%, #8fd3f4 100%)"
+                          : attendanceRate >= 50
+                            ? "linear-gradient(90deg, #ffeaa7 0%, #fdcb6e 100%)"
+                            : "linear-gradient(90deg, #ffa8b5 0%, #ffd3a5 100%)",
+                    }}
+                  />
+                </div>
+                <span className="text-sm font-semibold tabular-nums">
+                  {attendanceRate.toFixed(1)}%
+                </span>
+              </div>
+            </TableCell>
+            <TableCell className="text-right">
+              <div className="flex items-center justify-end gap-1">
+                <Link
+                  className="inline-flex size-8 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+                  to={`/users/detail/${student.id}`}
+                >
+                  <Eye size={16} />
+                </Link>
+                <IconButton
+                  aria-label="more"
+                  id="long-button"
+                  aria-controls={opens ? "long-menu" : undefined}
+                  aria-expanded={opens}
+                  aria-haspopup="true"
+                  onClick={handleClick}
+                >
+                  <MoreHorizontal size={16} />{" "}
+                </IconButton>
+                <Menu
+                  id="long-menu"
+                  anchorEl={anchorEl}
+                  open={opens}
+                  onClose={handleClose}
+                  slotProps={{
+                    paper: {
+                      style: {
+                        maxHeight: 48 * 4.5,
+                        width: "20ch",
+                      },
+                    },
+                    list: {
+                      "aria-labelledby": "long-button",
+                    },
+                  }}
+                >
+                  <MenuItem key="Edit" onClick={handleEdit}>
+                    <Edit size={16} className="mr-2" />
+                    Edit
+                  </MenuItem>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <MenuItem key="Delete">
+                        <Trash2 size={16} className="mr-2" />
+                        Delete
+                      </MenuItem>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Delete User?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Are you sure you want to delete "{student.name}"? This
+                          action cannot be undone.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel onClick={handleClose}>
+                          Cancel
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={handleDelete}
+                          className="bg-red-600 hover:bg-red-700"
+                        >
+                          Delete
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </Menu>
+              </div>
+            </TableCell>
+          </TableRow>
+          {open && (
+            <TableRow className="bg-zinc-50/80 dark:bg-zinc-900/50">
+              <TableCell colSpan={7} className="p-0">
+                <div className="px-4 py-4">
+                  <p className="mb-3 text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+                    Attendance History
+                  </p>
+                  {student.studentAttendance.length > 0 ? (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Date</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Time</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {paginatedHistory
+                          .sort(
+                            (a, b) =>
+                              new Date(b.date).getTime() -
+                              new Date(a.date).getTime(),
+                          )
+                          .map((record) => (
+                            <TableRow key={`${record.date}-${record.status}`}>
+                              <TableCell>
+                                {new Date(record.date).toLocaleDateString()}
+                              </TableCell>
+                              <TableCell>
+                                <Badge
+                                  variant={
+                                    record.status === "present"
+                                      ? "success"
+                                      : record.status === "excused absence"
+                                        ? "warning"
+                                        : "danger"
+                                  }
+                                >
+                                  {record.status === "present"
+                                    ? "Present"
+                                    : record.status === "excused absence"
+                                      ? "Excused Absence"
+                                      : "Absent"}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                {formatVietnamTime(record.timestamp)}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                      </TableBody>
+                    </Table>
+                  ) : (
+                    <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                      No attendance records yet
+                    </p>
+                  )}
+                  <Pagination
+                    currentPage={historyPage}
+                    totalPages={totalHistoryPages}
+                    onPageChange={setHistoryPage}
+                  />
+                </div>
+              </TableCell>
+            </TableRow>
+          )}
+        </>
       )}
     </>
   );
@@ -326,34 +396,33 @@ export function DashboardPage() {
   useEffect(() => {
     if (!user) return;
 
-    const fetchStudents = async () => {
+    let cancelled = false;
+
+    void (async () => {
       setLoading(true);
       setFetchError("");
 
-      try {
-        const classId =
-          user.role === "teacher" && user.classId ? user.classId : undefined;
+      const result = await fetchStudentsForUser(user);
+      if (cancelled) return;
 
-        if (user.role === "teacher" && !user.classId) {
-          setStudents([]);
-          setFetchError("Teacher chưa được gán lớp (classId). Vui lòng cập nhật trong Settings.");
-          return;
-        }
+      setStudents(result.students);
+      setFetchError(result.error);
+      setLoading(false);
+    })();
 
-        const data = await getStudents({ classId });
-        setStudents(data);
-      } catch (err) {
-        console.error(err);
-        setStudents([]);
-        setFetchError(
-          "Không tải được danh sách học sinh. Kiểm tra RLS policy trên Supabase hoặc Console.",
-        );
-      } finally {
-        setLoading(false);
-      }
+    return () => {
+      cancelled = true;
     };
+  }, [user]);
 
-    fetchStudents();
+  const handleStudentDeleted = useCallback(() => {
+    if (!user) return;
+
+    void (async () => {
+      const result = await fetchStudentsForUser(user);
+      setStudents(result.students);
+      setFetchError(result.error);
+    })();
   }, [user]);
 
   const filteredStudents = useMemo(() => {
@@ -404,9 +473,7 @@ export function DashboardPage() {
       </div>
 
       {loading ? (
-        <div className="text-center py-20 text-zinc-500">
-          Đang tải danh sách học sinh...
-        </div>
+        <div className="text-center py-20 text-zinc-500">Loading...</div>
       ) : fetchError ? (
         <div className="text-center py-20 border-2 border-dashed border-red-200 dark:border-red-800 rounded-3xl px-4">
           <p className="text-red-600 dark:text-red-400">{fetchError}</p>
@@ -418,7 +485,7 @@ export function DashboardPage() {
           </h2>
           <p className="text-zinc-500 dark:text-zinc-400 max-w-sm mx-auto">
             {user?.role === "teacher"
-              ? `Không có học sinh role "student" cùng classId: ${user.classId}. Kiểm tra bảng User trên Supabase.`
+              ? `No students found with role "student" and classId: ${user.classId}. Check the User table in Supabase.`
               : "There are no students in the system yet."}
           </p>
         </div>
@@ -493,7 +560,11 @@ export function DashboardPage() {
                   </TableRow>
                 ) : (
                   paginatedStudents.map((student) => (
-                    <StudentList key={student.id} student={student} />
+                    <StudentList
+                      key={student.id}
+                      student={student}
+                      onDeleted={handleStudentDeleted}
+                    />
                   ))
                 )}
               </TableBody>

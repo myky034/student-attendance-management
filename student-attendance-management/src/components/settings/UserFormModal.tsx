@@ -28,7 +28,7 @@ import { toast } from "sonner";
 const generateQRCode = () => {
   const timestamp = Date.now();
   const randomString = Math.random().toString(36).substring(2, 15);
-  const qrCode = `STU-${timestamp}-${randomString}`.toUpperCase();
+  const qrCode = `GXTD-${timestamp}-${randomString}`.toUpperCase();
   return qrCode;
 };
 

@@ -9,6 +9,7 @@ import { QRScanner } from "../pages/QRScanner";
 import { UserFormPage } from "../pages/UserFormPage";
 import { Students } from "../pages/(admin)/Students";
 import { Settings } from "../pages/(admin)/Settings";
+import { UserFormDetail } from "@/pages/UserFormDetail";
 
 export const router = createBrowserRouter([
   {
@@ -54,6 +55,7 @@ export const router = createBrowserRouter([
         Component: UserFormPage,
       },
       { path: "users/edit/:userId", Component: UserFormPage },
+      { path: "users/detail/:userId", Component: UserFormDetail },
     ],
   },
 ]);
