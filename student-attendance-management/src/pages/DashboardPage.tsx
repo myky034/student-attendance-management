@@ -51,6 +51,7 @@ import {
 } from "@/lib/api/students";
 import { formatVietnamTime, getVietnamDateString } from "@/lib/datetime";
 import { toast } from "sonner";
+import { ImportUserModal } from "@/components/ImportUserModal";
 
 const ITEM_PER_PAGE = 15;
 
@@ -392,6 +393,7 @@ export function DashboardPage() {
   const { user } = useAppContext();
   const navigate = useNavigate();
   const [studentPage, setStudentPage] = useState(1);
+  const [importUserModalOpen, setImportUserModalOpen] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -511,7 +513,10 @@ export function DashboardPage() {
                 </CardDescription>
               </div>
               <div className="flex justify-end gap-3">
-                <Button onClick={() => navigate("")} variant="outline">
+                <Button
+                  onClick={() => setImportUserModalOpen(true)}
+                  variant="outline"
+                >
                   <Library size={20} />
                   <span>Import Students</span>
                 </Button>
@@ -577,6 +582,11 @@ export function DashboardPage() {
           </CardContent>
         </Card>
       )}
+      <ImportUserModal
+        isOpen={importUserModalOpen}
+        onClose={() => setImportUserModalOpen(false)}
+        onSuccess={handleStudentDeleted}
+      />
     </div>
   );
 }

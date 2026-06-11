@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { QrCode, Trash2 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
@@ -34,6 +34,16 @@ const MotionBox = motion.create(Box);
 const MotionCard = motion.create(Card);
 const MotionTableRow = motion.create(TableRow);
 
+function normalizeAttendanceDate(date: string): string {
+  return date.split("T")[0];
+}
+
+function hasAttendanceToday(student: StudentRecord, today: string): boolean {
+  return student.studentAttendance.some(
+    (record) => normalizeAttendanceDate(record.date) === today,
+  );
+}
+
 export function QRScanner() {
   const [students, setStudents] = useState<StudentRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -45,7 +55,9 @@ export function QRScanner() {
   >([]);
   const { user } = useAppContext();
 
-  const loadStudents = async () => {
+  const loadStudents = useCallback(async () => {
+    if (!user) return;
+
     setLoading(true);
     setError(null);
     try {
@@ -64,24 +76,55 @@ export function QRScanner() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
 
   useEffect(() => {
-    const fetchStudents = async () => {
+    if (!user) return;
+
+    let cancelled = false;
+
+    void (async () => {
       await loadStudents();
+      if (cancelled) return;
+    })();
+
+    return () => {
+      cancelled = true;
     };
-    fetchStudents();
-  }, []);
+  }, [user, loadStudents]);
+
+  const today = getVietnamDateString();
+
+  const studentsPendingToday = useMemo(
+    () => students.filter((student) => !hasAttendanceToday(student, today)),
+    [students, today],
+  );
 
   const unscannedStudents = useMemo(() => {
     const scannedIds = new Set(scannedStudents.map((entry) => entry.studentId));
-    return students.filter((student) => !scannedIds.has(student.id));
-  }, [students, scannedStudents]);
+    return studentsPendingToday.filter(
+      (student) => !scannedIds.has(student.id),
+    );
+  }, [studentsPendingToday, scannedStudents]);
+
+  const visibleScannedStudents = useMemo(() => {
+    const pendingIds = new Set(
+      studentsPendingToday.map((student) => student.id),
+    );
+    return scannedStudents.filter((entry) => pendingIds.has(entry.studentId));
+  }, [scannedStudents, studentsPendingToday]);
+
+  const alreadyMarkedCount = students.length - studentsPendingToday.length;
 
   const handleScan = (studentId: string) => {
-    const foundStudent = students.find((s) => s.id === studentId);
+    const foundStudent = studentsPendingToday.find((s) => s.id === studentId);
     if (!foundStudent) {
-      toast.error("Student not found");
+      const markedStudent = students.find((s) => s.id === studentId);
+      if (markedStudent && hasAttendanceToday(markedStudent, today)) {
+        toast.warning(`${markedStudent.name} đã được điểm danh hôm nay`);
+      } else {
+        toast.error("Student not found");
+      }
       return;
     }
 
@@ -108,9 +151,14 @@ export function QRScanner() {
     }
 
     const studentId = manualId.trim();
-    const foundStudent = students.find((s) => s.id === studentId);
+    const foundStudent = studentsPendingToday.find((s) => s.id === studentId);
     if (!foundStudent) {
-      toast.error("Student not found");
+      const markedStudent = students.find((s) => s.id === studentId);
+      if (markedStudent && hasAttendanceToday(markedStudent, today)) {
+        toast.warning(`${markedStudent.name} đã được điểm danh hôm nay`);
+      } else {
+        toast.error("Student not found");
+      }
       return;
     }
 
@@ -119,33 +167,36 @@ export function QRScanner() {
   };
 
   const handleCompleteAttendance = async () => {
-    if (scannedStudents.length === 0) {
+    setLoading(true);
+    if (visibleScannedStudents.length === 0) {
       toast.error("No students scanned");
+      setLoading(false);
       return;
     }
 
-    if (students.length === 0) {
-      toast.error("No students in class");
+    if (studentsPendingToday.length === 0) {
+      toast.error("All students already marked attendance today");
+      setLoading(false);
       return;
     }
 
-    const today = getVietnamDateString();
+    const todayDate = getVietnamDateString();
     const absentTimestamp = getVietnamTimestampString();
     const scannedById = new Map(
-      scannedStudents.map((entry) => [entry.studentId, entry]),
+      visibleScannedStudents.map((entry) => [entry.studentId, entry]),
     );
 
     let presentCount = 0;
     let absentCount = 0;
     let errorCount = 0;
 
-    for (const student of students) {
+    for (const student of studentsPendingToday) {
       const scanned = scannedById.get(student.id);
 
       try {
         await saveAttendanceRecord({
           studentId: student.id,
-          date: today,
+          date: todayDate,
           status: scanned ? "present" : "absent",
           timestamp: scanned ? scanned.timestamp : absentTimestamp,
           createdById: user.id,
@@ -169,6 +220,7 @@ export function QRScanner() {
       toast.success(
         `Attendance completed: ${presentCount} present, ${absentCount} absent`,
       );
+      await loadStudents();
     } else if (presentCount + absentCount > 0) {
       toast.warning(
         `Saved ${presentCount + absentCount} record(s), ${errorCount} failed`,
@@ -176,6 +228,7 @@ export function QRScanner() {
     } else {
       toast.error("Could not save any attendance records");
     }
+    setLoading(false);
   };
 
   const handleRemoveStudent = (studentId: string) => {
@@ -220,7 +273,7 @@ export function QRScanner() {
             QR Code
           </Typography>
           <AnimatePresence>
-            {scannedStudents.length > 0 && (
+            {visibleScannedStudents.length > 0 && (
               <motion.div
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
@@ -237,8 +290,8 @@ export function QRScanner() {
                     onClick={handleCompleteAttendance}
                     className="py-2.5 px-6 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-lg font-medium hover:bg-zinc-800 dark:hover:bg-zinc-200 inline-flex items-center gap-2"
                   >
-                    Complete Attendance ({scannedStudents.length} present,{" "}
-                    {unscannedStudents.length} absent)
+                    Complete Attendance ({visibleScannedStudents.length}{" "}
+                    present, {unscannedStudents.length} absent)
                   </Button>
                 </motion.div>
               </motion.div>
@@ -311,6 +364,12 @@ export function QRScanner() {
                     <Alert severity="info" sx={{ mb: 2, borderRadius: 2 }}>
                       Demo: Click on any QR code to simulate scanning
                     </Alert>
+                    {alreadyMarkedCount > 0 && (
+                      <Alert severity="warning" sx={{ mb: 2, borderRadius: 2 }}>
+                        {alreadyMarkedCount} student(s) đã điểm danh hôm nay và
+                        không hiển thị trong danh sách quét.
+                      </Alert>
+                    )}
                     <Box
                       sx={{
                         display: "grid",
@@ -341,7 +400,9 @@ export function QRScanner() {
                         </motion.div>
                       ) : unscannedStudents.length === 0 ? (
                         <Typography variant="body2" color="text.secondary">
-                          All students have been scanned
+                          {studentsPendingToday.length === 0
+                            ? "Tất cả học sinh đã được điểm danh hôm nay"
+                            : "All students in this session have been scanned"}
                         </Typography>
                       ) : (
                         unscannedStudents.map((student, idx) => (
@@ -448,11 +509,11 @@ export function QRScanner() {
                   animate={{ scale: [1, 1.2, 1] }}
                   transition={{
                     duration: 0.5,
-                    repeat: scannedStudents.length > 0 ? Infinity : 0,
+                    repeat: visibleScannedStudents.length > 0 ? Infinity : 0,
                   }}
                 >
                   <Chip
-                    label={scannedStudents.length}
+                    label={visibleScannedStudents.length}
                     size="small"
                     sx={{
                       color: "white",
@@ -463,7 +524,7 @@ export function QRScanner() {
                 </motion.div>
               </Box>
               <AnimatePresence>
-                {scannedStudents.length > 0 && (
+                {visibleScannedStudents.length > 0 && (
                   <motion.div
                     initial={{ opacity: 0, scale: 0.8 }}
                     animate={{ opacity: 1, scale: 1 }}
@@ -489,7 +550,7 @@ export function QRScanner() {
             </Box>
 
             <AnimatePresence mode="wait">
-              {scannedStudents.length === 0 ? (
+              {visibleScannedStudents.length === 0 ? (
                 <motion.div
                   key="empty"
                   initial={{ opacity: 0, scale: 0.9 }}
@@ -544,7 +605,7 @@ export function QRScanner() {
                       </TableHead>
                       <TableBody>
                         <AnimatePresence>
-                          {scannedStudents.map((entry, idx) => {
+                          {visibleScannedStudents.map((entry, idx) => {
                             const student = getStudentById(entry.studentId);
                             return (
                               <MotionTableRow

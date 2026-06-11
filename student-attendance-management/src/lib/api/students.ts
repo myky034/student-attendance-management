@@ -292,6 +292,18 @@ export async function saveStudents(input: {
 /** @deprecated Use createStudent */
 export const CreateStudent = createStudent;
 
+export async function importStudents(
+  students: CreateStudentInput[],
+): Promise<StudentRecord[]> {
+  const results: StudentRecord[] = [];
+
+  for (const student of students) {
+    results.push(await createStudent(student));
+  }
+
+  return results;
+}
+
 /**
  * Delete a student by ID
  * @param id - The ID of the student to delete
