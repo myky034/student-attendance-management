@@ -37,6 +37,14 @@ type ClassRelation = {
   grade: GradeRow | GradeRow[] | null;
 };
 
+type AttendanceRecordRow = {
+  id: string;
+  date: string;
+  status: string;
+  timestamp: string;
+  createdById: string;
+};
+
 type StudentRow = {
   id: string;
   name: string;
@@ -68,6 +76,7 @@ export type StudentRecord = Omit<StudentRow, "class"> & {
     name: string;
     grade: GradeRow | null;
   } | null;
+  attendance: AttendanceRecordRow[];
 };
 
 export type SaveStudentInput = {
@@ -103,6 +112,7 @@ function mapStudentRow(student: StudentRow): StudentRecord {
     ...student,
     class: normalizeClass(student.class),
     studentAttendance: student.studentAttendance ?? [],
+    attendance: student.studentAttendance ?? [],
   };
 }
 
@@ -137,7 +147,8 @@ export async function getStudents(
       .from("User")
       .select(select)
       .eq("role", "student")
-      .or("isDeleted.eq.false,isDeleted.is.null");
+      .or("isDeleted.eq.false,isDeleted.is.null")
+      .order("name", { ascending: true });
 
     if (options?.classId) {
       query = query.eq("classId", options.classId);

@@ -26,8 +26,18 @@ export type GetAttendanceRecordsInput = {
   date: string;
 };
 
+export type GetAttendanceRecordsBulkInput = {
+  studentIds: string[];
+  dateFrom?: string;
+  dateTo?: string;
+};
+
 function toDateOnly(value: string): string {
   return value.split("T")[0];
+}
+
+export function normalizeAttendanceDate(value: string): string {
+  return toDateOnly(value);
 }
 
 export async function getAttendanceRecords(
@@ -45,6 +55,36 @@ export async function getAttendanceRecords(
     throw error;
   }
   return data as AttendanceRecord[];
+}
+
+export async function getAttendanceRecordsByStudentIds(
+  input: GetAttendanceRecordsBulkInput,
+): Promise<AttendanceRecord[]> {
+  if (input.studentIds.length === 0) {
+    return [];
+  }
+
+  const supabase = createClient();
+  let query = supabase
+    .from("AttendanceRecord")
+    .select("*")
+    .in("studentId", input.studentIds);
+
+  if (input.dateFrom) {
+    query = query.gte("date", input.dateFrom);
+  }
+  if (input.dateTo) {
+    query = query.lte("date", input.dateTo);
+  }
+
+  const { data, error } = await query.order("date", { ascending: true });
+
+  if (error) {
+    console.error("getAttendanceRecordsByStudentIds error:", error);
+    throw error;
+  }
+
+  return (data ?? []) as AttendanceRecord[];
 }
 
 export async function createAttendanceRecord(

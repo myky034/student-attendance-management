@@ -1,5 +1,11 @@
 import { motion } from "motion/react";
-import { SettingsIcon, Shield, Users } from "lucide-react";
+import {
+  GraduationCap,
+  SettingsIcon,
+  Shield,
+  Users,
+  BookA,
+} from "lucide-react";
 import { Badge } from "../../components/ui/badge";
 import {
   Tabs,
@@ -40,14 +46,18 @@ export function Settings() {
       </motion.header>
 
       <Tabs defaultValue="users" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 max-w-md">
+        <TabsList className="grid w-full grid-cols-3 max-w-md">
           <TabsTrigger value="users" className="flex items-center gap-2">
             <Users size={16} />
             Users
           </TabsTrigger>
-          <TabsTrigger value="permissions" className="flex items-center gap-2">
-            <Shield size={16} />
-            Permissions
+          <TabsTrigger value="grades" className="flex items-center gap-2">
+            <GraduationCap size={16} />
+            Grades
+          </TabsTrigger>
+          <TabsTrigger value="classes" className="flex items-center gap-2">
+            <BookA size={16} />
+            Classes
           </TabsTrigger>
         </TabsList>
 
@@ -55,17 +65,32 @@ export function Settings() {
           <UserManagement />
         </TabsContent>
 
-        <TabsContent value="permissions" className="mt-6">
+        <TabsContent value="grades" className="mt-6">
           <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-12 text-center">
-            <Shield
+            <GraduationCap
               size={48}
               className="mx-auto text-zinc-300 dark:text-zinc-700 mb-4"
             />
             <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50 mb-2">
-              Permissions Management
+              Grades Management
             </h3>
             <p className="text-zinc-500 dark:text-zinc-400">
-              Permission management features will be available soon
+              Grade management features will be available soon
+            </p>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="classes" className="mt-6">
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-12 text-center">
+            <BookA
+              size={48}
+              className="mx-auto text-zinc-300 dark:text-zinc-700 mb-4"
+            />
+            <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50 mb-2">
+              Classes Management
+            </h3>
+            <p className="text-zinc-500 dark:text-zinc-400">
+              Class management features will be available soon
             </p>
           </div>
         </TabsContent>

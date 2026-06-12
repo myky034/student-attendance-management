@@ -16,6 +16,7 @@ import {
   LockOpen,
   Power,
   PowerOff,
+  Search,
 } from "lucide-react";
 import {
   Table,
@@ -27,7 +28,13 @@ import {
 } from "../ui/table";
 import { Badge } from "../ui/badge";
 import { UserFormModal } from "./UserFormModal";
-import { getUsers as getUsersApi, type DbUser } from "@/lib/api/user";
+import {
+  getUsers as getUsersApi,
+  type UserRecord,
+  deleteUserById,
+  deactivateUserById,
+  lockUserById,
+} from "@/lib/api/user";
 import { Pagination } from "../ui/pagination";
 import {
   AlertDialog,
@@ -40,19 +47,24 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "../ui/alert-dialog";
+import { toast } from "sonner";
 
 const ITEM_PER_PAGE = 15;
 
 export function UserManagement() {
-  const [users, setUsers] = useState<DbUser[]>([]);
+  const [users, setUsers] = useState<UserRecord[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [userPage, setUserPage] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<DbUser | null>(null);
+  const [selectedUser, setSelectedUser] = useState<UserRecord | null>(null);
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
+  const [isLocking, setIsLocking] = useState(false);
+  const [isDeactivating, setIsDeactivating] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const handleOpen = () => {
     setIsOpen(true);
+    setSelectedUser(null);
   };
   const handleClose = () => {
     setIsOpen(false);
@@ -61,7 +73,7 @@ export function UserManagement() {
   const loadUsers = async () => {
     setIsLoading(true);
     try {
-      const data = await getUsersApi();
+      const data = await getUsersApi(searchQuery);
       setUsers(data);
     } catch (error) {
       console.error("Failed to load users:", error);
@@ -77,7 +89,15 @@ export function UserManagement() {
     fetchUsers();
   }, []);
 
-  const paginatedUsers = users.slice(
+  const filteredUsers = users.filter(
+    (user) =>
+      user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      user.class?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      user.role.toLowerCase().includes(searchQuery.toLowerCase()),
+  );
+
+  const paginatedUsers = filteredUsers.slice(
     (userPage - 1) * ITEM_PER_PAGE,
     userPage * ITEM_PER_PAGE,
   );
@@ -88,24 +108,68 @@ export function UserManagement() {
     const user = users.find((user) => user.id === id);
     if (user) {
       setSelectedUser(user);
+      console.log("Selected user:", user);
     }
   };
 
-  const handleDeleteUser = (id: string) => {
-    setDeletingUserId(id);
-  };
-
-  const handleToggleUserLock = (id: string) => {
-    const user = users.find((user) => user.id === id);
-    if (user) {
-      setSelectedUser(user);
+  const handleDeleteUser = async (id: string) => {
+    setIsLoading(true);
+    try {
+      await deleteUserById(id);
+      setDeletingUserId(null);
+      loadUsers();
+      toast.success("User deleted successfully");
+    } catch (error) {
+      console.error("Failed to delete user:", error);
+      toast.error("Failed to delete user");
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleToggleUserActive = (id: string) => {
-    const user = users.find((user) => user.id === id);
-    if (user) {
-      setSelectedUser(user);
+  const handleToggleUserLock = async (id: string) => {
+    const existing = users.find((user) => user.id === id);
+    if (!existing) return;
+
+    setIsLoading(true);
+    setIsLocking(true);
+    try {
+      await lockUserById(id);
+      loadUsers();
+      toast.success(
+        existing.isLocked
+          ? "User unlocked successfully"
+          : "User locked successfully",
+      );
+    } catch (error) {
+      console.error("Failed to toggle user lock:", error);
+      toast.error("Failed to update user lock status");
+    } finally {
+      setIsLocking(false);
+      setIsLoading(false);
+    }
+  };
+
+  const handleToggleUserActive = async (id: string) => {
+    const existing = users.find((user) => user.id === id);
+    if (!existing) return;
+
+    setIsLoading(true);
+    setIsDeactivating(true);
+    try {
+      await deactivateUserById(id);
+      loadUsers();
+      toast.success(
+        existing.isActive
+          ? "User deactivated successfully"
+          : "User activated successfully",
+      );
+    } catch (error) {
+      console.error("Failed to toggle user active status:", error);
+      toast.error("Failed to update user status");
+    } finally {
+      setIsDeactivating(false);
+      setIsLoading(false);
     }
   };
 
@@ -127,12 +191,27 @@ export function UserManagement() {
           </div>
         </CardHeader>
         <CardContent>
+          <div className="relative max-w-sm mb-4">
+            <Search
+              size={16}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400"
+            />
+            <input
+              type="search"
+              placeholder="Search by name, email, or class..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full rounded-lg border border-zinc-200 bg-white py-2 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+            />
+          </div>
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>No</TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Email</TableHead>
+                <TableHead>Grade</TableHead>
+                <TableHead>Class</TableHead>
                 <TableHead>Role</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Created At</TableHead>
@@ -147,11 +226,17 @@ export function UserManagement() {
                       <TableCell>{index + 1}</TableCell>
                       <TableCell>{user.name}</TableCell>
                       <TableCell>{user.email}</TableCell>
+                      <TableCell>{user.class?.grade?.name ?? "-"}</TableCell>
+                      <TableCell>{user.class?.name}</TableCell>
                       <TableCell>{user.role}</TableCell>
                       <TableCell>
-                        <Badge variant={user.isActive ? "success" : "danger"}>
-                          {user.isActive ? "Active" : "Inactive"}
-                        </Badge>
+                        {user.isLocked ? (
+                          <Badge variant="warning">Locked</Badge>
+                        ) : (
+                          <Badge variant={user.isActive ? "success" : "danger"}>
+                            {user.isActive ? "Active" : "Inactive"}
+                          </Badge>
+                        )}
                       </TableCell>
                       <TableCell>
                         {new Date(user.createdAt).toLocaleDateString()}
@@ -205,7 +290,7 @@ export function UserManagement() {
                           variant="ghost"
                           size="icon"
                           onClick={() => handleToggleUserLock(user.id)}
-                          disabled={isLoading}
+                          disabled={isLocking}
                         >
                           {user.isLocked ? (
                             <LockOpen size={16} />
@@ -217,7 +302,7 @@ export function UserManagement() {
                           variant="ghost"
                           size="icon"
                           onClick={() => handleToggleUserActive(user.id)}
-                          disabled={isLoading}
+                          disabled={isDeactivating}
                         >
                           {user.isActive ? (
                             <PowerOff size={16} />
@@ -243,16 +328,14 @@ export function UserManagement() {
                 )
               ) : (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center">
-                    No users found
-                  </TableCell>
+                  <TableCell className="text-center">No users found</TableCell>
                 </TableRow>
               )}
             </TableBody>
           </Table>
           <Pagination
             currentPage={userPage}
-            totalPages={Math.ceil(users.length / ITEM_PER_PAGE)}
+            totalPages={Math.ceil(filteredUsers.length / ITEM_PER_PAGE)}
             onPageChange={setUserPage}
           />
         </CardContent>

@@ -278,9 +278,8 @@ export function ImportUserModal({
                 Click to upload a file
               </h3>
               <p className="max-w-md text-zinc-500 dark:text-zinc-400">
-                Hỗ trợ CSV, TXT, XLSX, XLS. Cột bắt buộc:{" "}
-                <strong>Name</strong>. Email/Username có thể để trống — hệ
-                thống tự sinh khi import.
+                Hỗ trợ CSV, TXT, XLSX, XLS. Cột bắt buộc: <strong>Name</strong>.
+                Email/Username có thể để trống — hệ thống tự sinh khi import.
               </p>
             </div>
           ) : (

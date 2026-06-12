@@ -10,6 +10,7 @@ import { UserFormPage } from "../pages/UserFormPage";
 import { Students } from "../pages/(admin)/Students";
 import { Settings } from "../pages/(admin)/Settings";
 import { UserFormDetail } from "@/pages/UserFormDetail";
+import { AttendanceReport } from "@/pages/AttendanceReport";
 
 export const router = createBrowserRouter([
   {
@@ -56,6 +57,7 @@ export const router = createBrowserRouter([
       },
       { path: "users/edit/:userId", Component: UserFormPage },
       { path: "users/detail/:userId", Component: UserFormDetail },
+      { path: "attendance-report", Component: AttendanceReport },
     ],
   },
 ]);

@@ -20,9 +20,9 @@ import { Switch } from "../ui/switch";
 import { Button } from "../ui/button";
 import { Paper, Typography, Box } from "@mui/material";
 import { QRCodeSVG } from "qrcode.react";
-import { Key, RefreshCw, Eye } from "lucide-react";
+import { Key, RefreshCw, Eye, EyeOff } from "lucide-react";
 import { getClasses, type ClassOption } from "@/lib/api/classes";
-import { createUser, type DbUser, type UserRole } from "@/lib/api/user";
+import { type UserRecord, type UserRole, saveUser } from "@/lib/api/user";
 import { toast } from "sonner";
 
 const generateQRCode = () => {
@@ -56,7 +56,7 @@ export function UserFormModal({
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: () => void;
-  user: DbUser;
+  user?: UserRecord;
 }) {
   const isEditMode = user ? true : false;
   const [formData, setFormData] = useState({
@@ -71,7 +71,6 @@ export function UserFormModal({
     updatedAt: user?.updatedAt ?? new Date(),
     qrCode: user?.qrCode ?? generateQRCode(),
     id: user?.id ?? "",
-    class: user?.class ?? "",
     classId: user?.classId ?? "",
   });
   const [errors, setErrors] = useState<Record<string, string>>({
@@ -88,17 +87,28 @@ export function UserFormModal({
   });
   const [classes, setClasses] = useState<ClassOption[]>([]);
   const [showPassword, setShowPassword] = useState(false);
+  const [existingUser, setExistingUser] = useState<UserRecord | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleClose = () => {
+    setExistingUser(null);
+    setSubmitting(false);
+    onClose();
+  };
 
   useEffect(() => {
     if (!isOpen) return;
     getClasses()
       .then((data) => {
         setClasses(data);
+        if (user) {
+          setExistingUser(user);
+        }
       })
       .catch((error) => {
         console.error(error);
       });
-  }, [isOpen]);
+  }, [isOpen, user]);
 
   const handleRefreshQRCode = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
@@ -157,50 +167,57 @@ export function UserFormModal({
       return;
     }
 
+    setSubmitting(true);
     try {
-      if (isEditMode) {
-        // updateUser(formData);
-      } else {
-        await createUser({
-          name: formData.name,
-          email: formData.email,
-          username: formData.username,
-          password: formData.password,
-          role: formData.role as UserRole,
-          qrCode: formData.qrCode,
-          classId: formData.classId,
-          isActive: formData.isActive,
-        });
-        if (!isEditMode) {
-          toast.success("User created successfully");
-          onSuccess?.();
-        } else {
-          toast.success("User updated successfully");
-          onSuccess?.();
-        }
-      }
+      await saveUser({
+        id: isEditMode ? user?.id : undefined,
+        name: formData.name,
+        email: formData.email,
+        username: formData.username,
+        password: formData.password,
+        role: formData.role as UserRole,
+        qrCode: formData.qrCode,
+        classId: formData.classId,
+        isActive: formData.isActive,
+      });
+      toast.success(
+        isEditMode && existingUser
+          ? "User updated successfully"
+          : "User created successfully",
+      );
+      onSuccess?.();
+      handleClose();
     } catch (error) {
       console.error(error);
       toast.error(
         "Failed to save user. Check Supabase RLS policies and required fields.",
       );
     } finally {
-      onClose();
+      setSubmitting(false);
     }
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-7xl w-full p-4">
-        <DialogHeader>
+    <Dialog open={isOpen} onOpenChange={handleClose}>
+      <DialogContent
+        className="
+    flex w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] flex-col gap-0 overflow-hidden
+    p-4 sm:w-[calc(100vw-2rem)] sm:max-w-2xl sm:p-5
+    md:max-w-4xl lg:max-w-5xl xl:max-w-6xl
+    max-h-[92dvh] sm:max-h-[88vh]"
+      >
+        <DialogHeader className="shrink-0 pb-2">
           <DialogTitle>{isEditMode ? "Edit User" : "Create User"}</DialogTitle>
           <DialogDescription>
             {isEditMode ? "Edit the user details" : "Add a new user"}
           </DialogDescription>
         </DialogHeader>
 
-        <form className="space-y-4 w-full" onSubmit={handleSubmit}>
-          <div className="flex flex-row gap-4 justify-between">
+        <form
+          className="space-y-4 w-full min-h-0 flex-1 flex-col gap-3 overflow-hidden py-2 sm:gap-4 sm:py-3"
+          onSubmit={handleSubmit}
+        >
+          <div className="flex flex-row gap-4 justify-between min-h-0 flex-1 overflow-hidden py-2 sm:gap-4 sm:py-3">
             <div className="w-1/2">
               <Paper
                 sx={{
@@ -316,7 +333,7 @@ export function UserFormModal({
               </div>
               <div className="space-y-2 mb-4">
                 <Label htmlFor="password">Password</Label>
-                <div>
+                <div className="flex flex-row gap-2 relative">
                   <Input
                     id="password"
                     placeholder="Enter password"
@@ -332,24 +349,28 @@ export function UserFormModal({
                       }))
                     }
                     type={showPassword ? "text" : "password"}
+                    className="w-full"
                   />
                   <Button
+                    type="button"
                     size="icon"
+                    className="absolute right-3 top-1/2 -translate-y-1/2"
                     variant="ghost"
                     onClick={handleShowPassword}
                   >
-                    <Eye size={16} />
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                   </Button>
                 </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleGeneratePassword}
-                >
-                  <Key size={16} />
-                  <span>Generate Password</span>
-                </Button>
+                <div className="text-right mt-2">
+                  <Button
+                    type="reset"
+                    variant="link"
+                    onClick={handleGeneratePassword}
+                  >
+                    <Key size={16} />
+                    Generate Password
+                  </Button>
+                </div>
                 {errors.password && (
                   <p className="text-sm text-red-500">{errors.password}</p>
                 )}
@@ -426,7 +447,7 @@ export function UserFormModal({
             </div>
           </div>
           <DialogFooter>
-            <Button type="submit" variant="default">
+            <Button type="submit" variant="default" disabled={submitting}>
               Save
             </Button>
             <Button type="button" variant="outline" onClick={onClose}>

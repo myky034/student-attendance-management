@@ -1,6 +1,13 @@
 import { useEffect } from "react";
 import { Outlet, Link, useNavigate, useLocation } from "react-router";
-import { Sparkles, User, LogOut, Home, ScanBarcode } from "lucide-react";
+import {
+  Sparkles,
+  User,
+  LogOut,
+  Home,
+  ScanBarcode,
+  FileText,
+} from "lucide-react";
 import { useAppContext } from "../context/useAppContext";
 
 export function AppLayout() {
@@ -27,6 +34,11 @@ export function AppLayout() {
       to: "/qrscanner",
       label: "QR Scanner",
       icon: <ScanBarcode size={20} />,
+    },
+    {
+      to: "/attendance-report",
+      label: "Attendance Report",
+      icon: <FileText size={20} />,
     },
   ];
 

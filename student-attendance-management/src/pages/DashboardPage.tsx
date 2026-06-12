@@ -49,6 +49,7 @@ import {
   type StudentRecord,
   deleteStudentById,
 } from "@/lib/api/students";
+import { getClassNameById } from "@/lib/api/classes";
 import { formatVietnamTime, getVietnamDateString } from "@/lib/datetime";
 import { toast } from "sonner";
 import { ImportUserModal } from "@/components/ImportUserModal";
@@ -199,7 +200,6 @@ function StudentList({
               </div>
             </TableCell>
             <TableCell>{student.email}</TableCell>
-            <TableCell>{student.class?.name ?? "-"}</TableCell>
             <TableCell>
               {todayAttendance ? (
                 <Badge
@@ -394,6 +394,14 @@ export function DashboardPage() {
   const navigate = useNavigate();
   const [studentPage, setStudentPage] = useState(1);
   const [importUserModalOpen, setImportUserModalOpen] = useState(false);
+  const [className, setClassName] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user?.classId) {
+      return;
+    }
+    getClassNameById(user.classId).then(setClassName);
+  }, [user?.classId]);
 
   useEffect(() => {
     if (!user) return;
@@ -434,8 +442,7 @@ export function DashboardPage() {
     return students.filter(
       (student) =>
         student.name.toLowerCase().includes(q) ||
-        student.email.toLowerCase().includes(q) ||
-        (student.class?.name.toLowerCase().includes(q) ?? false),
+        student.email.toLowerCase().includes(q),
     );
   }, [students, searchTerm]);
 
@@ -487,7 +494,7 @@ export function DashboardPage() {
           </h2>
           <p className="text-zinc-500 dark:text-zinc-400 max-w-sm mx-auto">
             {user?.role === "teacher"
-              ? `No students found with role "student" and classId: ${user.classId}. Check the User table in Supabase.`
+              ? `No students found with role "student". Check the User table in Supabase.`
               : "There are no students in the system yet."}
           </p>
         </div>
@@ -497,7 +504,11 @@ export function DashboardPage() {
             <div className="flex justify-between items-center">
               <div>
                 <div className="flex items-center gap-2">
-                  <CardTitle>Students</CardTitle>
+                  <CardTitle>
+                    {user?.classId
+                      ? ` ${className ?? user.classId}`
+                      : "Students"}
+                  </CardTitle>
                   <Chip
                     label={students.length}
                     size="small"
@@ -535,7 +546,7 @@ export function DashboardPage() {
               />
               <input
                 type="search"
-                placeholder="Search by name, email, or class..."
+                placeholder="Search by name or email..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full rounded-lg border border-zinc-200 bg-white py-2 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
@@ -547,7 +558,6 @@ export function DashboardPage() {
                   <TableHead className="w-10" />
                   <TableHead>Name</TableHead>
                   <TableHead>Email</TableHead>
-                  <TableHead>Class</TableHead>
                   <TableHead>Today</TableHead>
                   <TableHead>Attendance</TableHead>
                   <TableHead className="w-10 text-center">Actions</TableHead>
