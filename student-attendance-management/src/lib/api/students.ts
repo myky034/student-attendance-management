@@ -7,6 +7,8 @@ type CreateStudentInput = {
   password: string;
   qrCode: string;
   classId: string;
+  isActive: boolean;
+  isLocked: boolean;
 };
 
 type UpdateStudentInput = {
@@ -17,6 +19,8 @@ type UpdateStudentInput = {
   password?: string;
   qrCode: string;
   classId: string;
+  isActive: boolean;
+  isLocked: boolean;
 };
 
 type GetStudentsOptions = {
@@ -87,6 +91,8 @@ export type SaveStudentInput = {
   password?: string;
   qrCode: string;
   classId: string;
+  isActive: boolean;
+  isLocked: boolean;
 };
 
 const studentSelect = `id, name, email, username, role, qrCode, isActive, isDeleted, isLocked, classId, createdAt, updatedAt,
@@ -183,7 +189,6 @@ export async function createStudent(
   student: CreateStudentInput,
 ): Promise<StudentRecord> {
   const supabase = createClient();
-
   const { data, error } = await supabase
     .from("User")
     .insert({
@@ -216,12 +221,14 @@ export async function updateStudent(
   student: UpdateStudentInput,
 ): Promise<StudentRecord> {
   const supabase = createClient();
-  const payload: Record<string, string> = {
+  const payload: Record<string, string | boolean> = {
     name: student.name,
     email: student.email.trim().toLowerCase(),
     username: student.username.trim(),
     qrCode: student.qrCode,
     classId: student.classId,
+    isActive: student.isActive ? true : false,
+    isLocked: student.isLocked ? true : false,
     updatedAt: new Date().toISOString(),
   };
 
@@ -258,6 +265,8 @@ export async function saveStudent(
         password: input.password,
         qrCode: input.qrCode,
         classId: input.classId,
+        isActive: input.isActive,
+        isLocked: input.isLocked,
       });
     }
   }
@@ -277,13 +286,18 @@ export async function saveStudent(
     password,
     qrCode: input.qrCode,
     classId: input.classId,
-  });
+    isActive: input.isActive,
+    isLocked: input.isLocked,
+  } as CreateStudentInput);
 }
 
 /** @deprecated Use saveStudent for single-student upsert */
 export async function saveStudents(input: {
   classId: string;
-  students: Pick<StudentRow, "id" | "name" | "email" | "qrCode" | "username">[];
+  students: Pick<
+    StudentRow,
+    "id" | "name" | "email" | "qrCode" | "username" | "isActive" | "isLocked"
+  >[];
 }): Promise<StudentRecord[]> {
   return Promise.all(
     input.students.map((student) =>
@@ -295,6 +309,8 @@ export async function saveStudents(input: {
         password: "",
         qrCode: student.qrCode,
         classId: input.classId,
+        isActive: student.isActive,
+        isLocked: student.isLocked,
       }),
     ),
   );
@@ -342,4 +358,41 @@ export async function deleteStudentById(id: string): Promise<StudentRecord> {
   }
 
   return mapStudentRow(data as unknown as StudentRow);
+}
+
+async function patchStudentFlags(
+  id: string,
+  flags: Partial<Pick<StudentRow, "isActive" | "isLocked" | "isDeleted">>,
+): Promise<StudentRecord> {
+  const supabase = createClient();
+  const payload: Record<string, string | boolean> = {
+    ...flags,
+    updatedAt: new Date().toISOString(),
+  };
+
+  const { data, error } = await supabase
+    .from("User")
+    .update(payload)
+    .eq("id", id)
+    .select(studentSelect)
+    .single();
+
+  if (error) {
+    console.error("patchStudentFlags error:", error);
+    throw error;
+  }
+
+  return mapStudentRow(data as unknown as StudentRow);
+}
+
+export async function deactivateStudentById(
+  id: string,
+): Promise<StudentRecord> {
+  const existing = await getStudentById(id);
+  return patchStudentFlags(id, { isActive: !existing.isActive });
+}
+
+export async function lockStudentById(id: string): Promise<StudentRecord> {
+  const existing = await getStudentById(id);
+  return patchStudentFlags(id, { isLocked: !existing.isLocked });
 }

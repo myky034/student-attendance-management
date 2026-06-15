@@ -13,6 +13,7 @@ import {
   type StudentRecord,
 } from "../lib/api/students";
 import { useAppContext } from "../context/useAppContext";
+import { Switch } from "../components/ui/switch";
 
 /**
  * Generate a random QR code
@@ -135,6 +136,8 @@ export const UserFormPage = () => {
         username: formData.username.trim(),
         qrCode: formData.qrCode,
         classId: user.classId,
+        isActive: existingStudent?.isActive ?? true,
+        isLocked: existingStudent?.isLocked ?? false,
       });
 
       toast.success(
@@ -277,6 +280,28 @@ export const UserFormPage = () => {
                 <p className="text-sm text-red-500">{errors.username}</p>
               )}
             </div>
+
+            {isEditMode && (
+              <div className="space-y-4 flex items-center gap-4">
+                <div className="space-y-2 flex items-center gap-2 mb-0">
+                  <Label htmlFor="isActive">Active</Label>
+                  <Switch
+                    id="isActive"
+                    checked={existingStudent?.isActive}
+                    //onCheckedChange={}
+                  />
+                </div>
+
+                <div className="space-y-2 flex items-center gap-2 mb-0">
+                  <Label htmlFor="isLocked">Locked</Label>
+                  <Switch
+                    id="isLocked"
+                    checked={existingStudent?.isLocked}
+                    //onCheckedChange={}
+                  />
+                </div>
+              </div>
+            )}
 
             <div className="flex w-full justify-end gap-4 pt-2">
               <Button variant="outline" type="button" onClick={handleClose}>

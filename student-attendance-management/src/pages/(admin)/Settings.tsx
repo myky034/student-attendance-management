@@ -5,6 +5,7 @@ import {
   Shield,
   Users,
   BookA,
+  Calendar,
 } from "lucide-react";
 import { Badge } from "../../components/ui/badge";
 import {
@@ -46,7 +47,7 @@ export function Settings() {
       </motion.header>
 
       <Tabs defaultValue="users" className="w-full">
-        <TabsList className="grid w-full grid-cols-3 max-w-md">
+        <TabsList className="grid w-full grid-cols-4 max-w-md">
           <TabsTrigger value="users" className="flex items-center gap-2">
             <Users size={16} />
             Users
@@ -58,6 +59,10 @@ export function Settings() {
           <TabsTrigger value="classes" className="flex items-center gap-2">
             <BookA size={16} />
             Classes
+          </TabsTrigger>
+          <TabsTrigger value="semesters" className="flex items-center gap-2">
+            <Calendar size={16} />
+            Semesters
           </TabsTrigger>
         </TabsList>
 
@@ -91,6 +96,21 @@ export function Settings() {
             </h3>
             <p className="text-zinc-500 dark:text-zinc-400">
               Class management features will be available soon
+            </p>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="semesters" className="mt-6">
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-12 text-center">
+            <Calendar
+              size={48}
+              className="mx-auto text-zinc-300 dark:text-zinc-700 mb-4"
+            />
+            <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50 mb-2">
+              Semesters Management
+            </h3>
+            <p className="text-zinc-500 dark:text-zinc-400">
+              Semester management features will be available soon
             </p>
           </div>
         </TabsContent>

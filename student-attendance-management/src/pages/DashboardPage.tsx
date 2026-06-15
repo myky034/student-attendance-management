@@ -37,6 +37,11 @@ import {
   Edit,
   Trash2,
   MoreHorizontal,
+  Power,
+  PowerOff,
+  LockOpen,
+  Lock,
+  Download,
 } from "lucide-react";
 import { Chip, IconButton, Menu, MenuItem } from "@mui/material";
 import { useAppContext } from "../context/useAppContext";
@@ -48,8 +53,23 @@ import {
   getStudents,
   type StudentRecord,
   deleteStudentById,
+  getStudentById,
+  deactivateStudentById,
+  lockStudentById,
 } from "@/lib/api/students";
 import { getClassNameById } from "@/lib/api/classes";
+import { getAcademicYears } from "@/lib/api/academicyear";
+import { getSemesters } from "@/lib/api/semester";
+import {
+  getAttendanceRecordsByStudentIds,
+  type AttendanceRecord,
+} from "@/lib/api/attendancerecord";
+import {
+  calculateYearlyPresentRate,
+  getAcademicYearForDate,
+  getYearSchoolSessions,
+  toDateString,
+} from "@/lib/attendanceYear";
 import { formatVietnamTime, getVietnamDateString } from "@/lib/datetime";
 import { toast } from "sonner";
 import { ImportUserModal } from "@/components/ImportUserModal";
@@ -88,9 +108,11 @@ async function fetchStudentsForUser(user: User): Promise<StudentsFetchResult> {
 
 function StudentList({
   student,
+  attendanceRate,
   onDeleted,
 }: {
   student: StudentRecord;
+  attendanceRate: number;
   onDeleted: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -100,6 +122,8 @@ function StudentList({
   const historyPerPage = 5;
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
+  const [isLocking, setIsLocking] = useState(false);
+  const [isDeactivating, setIsDeactivating] = useState(false);
 
   //Pagination for history
   const totalHistoryPages = Math.ceil(
@@ -142,17 +166,54 @@ function StudentList({
       });
   };
 
+  const handleActivate = async (id: string) => {
+    const student = await getStudentById(id);
+    if (!student) return;
+
+    setLoading(true);
+    setIsDeactivating(true);
+    try {
+      await deactivateStudentById(id);
+      toast.success(
+        student.isActive
+          ? "Student deactivated successfully"
+          : "Student activated successfully",
+      );
+    } catch (error) {
+      console.error("Failed to toggle student active status:", error);
+      toast.error("Failed to update student status");
+    } finally {
+      setIsDeactivating(false);
+      setLoading(false);
+    }
+  };
+
+  const handleLock = async (id: string) => {
+    const student = await getStudentById(id);
+    if (!student) return;
+
+    setLoading(true);
+    setIsLocking(true);
+    try {
+      await lockStudentById(id);
+      toast.success(
+        student.isLocked
+          ? "Student locked successfully"
+          : "Student unlocked successfully",
+      );
+    } catch (error) {
+      console.error("Failed to toggle student lock status:", error);
+      toast.error("Failed to update student lock status");
+    } finally {
+      setIsLocking(false);
+      setLoading(false);
+    }
+  };
+
   const todayDate = getVietnamDateString();
   const todayAttendance = student.studentAttendance.find(
     (r) => r.date === todayDate,
   );
-
-  const totalPresent = student.studentAttendance.filter(
-    (r) => r.status === "present",
-  ).length;
-  const totalRecords = student.studentAttendance.length;
-  const attendanceRate =
-    totalRecords > 0 ? (totalPresent / totalRecords) * 100 : 0;
 
   return (
     <>
@@ -200,6 +261,15 @@ function StudentList({
               </div>
             </TableCell>
             <TableCell>{student.email}</TableCell>
+            <TableCell>
+              {student.isLocked ? (
+                <Badge variant="warning">Locked</Badge>
+              ) : (
+                <Badge variant={student.isActive ? "success" : "danger"}>
+                  {student.isActive ? "Active" : "Inactive"}
+                </Badge>
+              )}
+            </TableCell>
             <TableCell>
               {todayAttendance ? (
                 <Badge
@@ -290,7 +360,7 @@ function StudentList({
                     </AlertDialogTrigger>
                     <AlertDialogContent>
                       <AlertDialogHeader>
-                        <AlertDialogTitle>Delete User?</AlertDialogTitle>
+                        <AlertDialogTitle>Delete Student?</AlertDialogTitle>
                         <AlertDialogDescription>
                           Are you sure you want to delete "{student.name}"? This
                           action cannot be undone.
@@ -305,6 +375,97 @@ function StudentList({
                           className="bg-red-600 hover:bg-red-700"
                         >
                           Delete
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <MenuItem key="Activate">
+                        {student.isActive ? (
+                          <PowerOff size={16} className="mr-2" />
+                        ) : (
+                          <Power size={16} className="mr-2" />
+                        )}
+                        {student.isActive ? "Deactivate" : "Activate"}
+                      </MenuItem>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>
+                          {student.isActive
+                            ? "Deactivate Student?"
+                            : "Activate Student?"}
+                        </AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Are you sure you want to{" "}
+                          {student.isActive
+                            ? "deactivate the student"
+                            : "activate the student"}{" "}
+                          "{student.name}"?
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel onClick={handleClose}>
+                          Cancel
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={() => handleActivate(student.id)}
+                          className={cn(
+                            "bg-red-600 hover:bg-red-700",
+                            !student.isActive &&
+                              "bg-green-600 hover:bg-green-700",
+                          )}
+                          disabled={isDeactivating}
+                        >
+                          {student.isActive
+                            ? "Deactivate Student"
+                            : "Activate Student"}
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <MenuItem key="Lock">
+                        {student.isLocked ? (
+                          <LockOpen size={16} className="mr-2" />
+                        ) : (
+                          <Lock size={16} className="mr-2" />
+                        )}
+                        {student.isLocked ? "Unlock" : "Lock"}
+                      </MenuItem>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>
+                          {student.isLocked
+                            ? "Unlock Student?"
+                            : "Lock Student?"}
+                        </AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Are you sure you want to{" "}
+                          {student.isLocked
+                            ? "unlock the student"
+                            : "lock the student"}{" "}
+                          "{student.name}
+                          "?
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel onClick={handleClose}>
+                          Cancel
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={() => handleLock(student.id)}
+                          className={cn(
+                            "bg-red-600 hover:bg-red-700",
+                            !student.isLocked &&
+                              "bg-green-600 hover:bg-green-700",
+                          )}
+                          disabled={isLocking}
+                        >
+                          {student.isLocked ? "Unlock Student" : "Lock Student"}
                         </AlertDialogAction>
                       </AlertDialogFooter>
                     </AlertDialogContent>
@@ -395,6 +556,10 @@ export function DashboardPage() {
   const [studentPage, setStudentPage] = useState(1);
   const [importUserModalOpen, setImportUserModalOpen] = useState(false);
   const [className, setClassName] = useState<string | null>(null);
+  const [yearAttendanceRecords, setYearAttendanceRecords] = useState<
+    AttendanceRecord[]
+  >([]);
+  const [yearSchoolSundays, setYearSchoolSundays] = useState<string[]>([]);
 
   useEffect(() => {
     if (!user?.classId) {
@@ -402,6 +567,54 @@ export function DashboardPage() {
     }
     getClassNameById(user.classId).then(setClassName);
   }, [user?.classId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const [years, semesters] = await Promise.all([
+          getAcademicYears(),
+          getSemesters(),
+        ]);
+        if (cancelled) return;
+
+        const academicYear = getAcademicYearForDate(years);
+        if (!academicYear) {
+          setYearSchoolSundays([]);
+          setYearAttendanceRecords([]);
+          return;
+        }
+
+        const { sundays } = getYearSchoolSessions(semesters, academicYear);
+        setYearSchoolSundays(sundays);
+
+        if (students.length === 0 || sundays.length === 0) {
+          setYearAttendanceRecords([]);
+          return;
+        }
+
+        const records = await getAttendanceRecordsByStudentIds({
+          studentIds: students.map((student) => student.id),
+          dateFrom: toDateString(academicYear.startDate),
+          dateTo: toDateString(academicYear.endDate),
+        });
+        if (!cancelled) {
+          setYearAttendanceRecords(records);
+        }
+      } catch (err) {
+        console.error("Failed to load yearly attendance context:", err);
+        if (!cancelled) {
+          setYearSchoolSundays([]);
+          setYearAttendanceRecords([]);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [students]);
 
   useEffect(() => {
     if (!user) return;
@@ -445,6 +658,26 @@ export function DashboardPage() {
         student.email.toLowerCase().includes(q),
     );
   }, [students, searchTerm]);
+
+  const attendanceRateByStudentId = useMemo(() => {
+    const recordsByStudent = yearAttendanceRecords.reduce<
+      Record<string, AttendanceRecord[]>
+    >((acc, record) => {
+      if (!acc[record.studentId]) {
+        acc[record.studentId] = [];
+      }
+      acc[record.studentId].push(record);
+      return acc;
+    }, {});
+
+    return students.reduce<Record<string, number>>((acc, student) => {
+      acc[student.id] = calculateYearlyPresentRate(
+        recordsByStudent[student.id] ?? [],
+        yearSchoolSundays,
+      );
+      return acc;
+    }, {});
+  }, [students, yearAttendanceRecords, yearSchoolSundays]);
 
   const totalStudentPages = Math.max(
     1,
@@ -525,6 +758,13 @@ export function DashboardPage() {
               </div>
               <div className="flex justify-end gap-3">
                 <Button
+                  onClick={() => navigate("/users/create")}
+                  variant="outline"
+                >
+                  <Download size={20} />
+                  <span>Download QR Code</span>
+                </Button>
+                <Button
                   onClick={() => setImportUserModalOpen(true)}
                   variant="outline"
                 >
@@ -558,6 +798,7 @@ export function DashboardPage() {
                   <TableHead className="w-10" />
                   <TableHead>Name</TableHead>
                   <TableHead>Email</TableHead>
+                  <TableHead>Status</TableHead>
                   <TableHead>Today</TableHead>
                   <TableHead>Attendance</TableHead>
                   <TableHead className="w-10 text-center">Actions</TableHead>
@@ -578,6 +819,9 @@ export function DashboardPage() {
                     <StudentList
                       key={student.id}
                       student={student}
+                      attendanceRate={
+                        attendanceRateByStudentId[student.id] ?? 0
+                      }
                       onDeleted={handleStudentDeleted}
                     />
                   ))
