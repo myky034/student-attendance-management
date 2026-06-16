@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import { format } from "date-fns";
 
 type SemesterRow = {
   id: number | string;
@@ -42,15 +43,48 @@ function mapSemesterRow(row: SemesterRow): Semester {
   };
 }
 
+export type CreateSemesterInput = {
+  name: string;
+  code: string;
+  startDate: string;
+  endDate: string;
+  sortOrder: number;
+  isActive: boolean;
+  academicYearId: string;
+};
+
+export type UpdateSemesterInput = {
+  id: string;
+  name: string;
+  code: string;
+  startDate: string;
+  endDate: string;
+  sortOrder: number;
+  isActive: boolean;
+  academicYearId: string;
+};
+
+export type SaveSemesterInput = {
+  id?: string;
+  name: string;
+  code: string;
+  startDate: string;
+  endDate: string;
+  sortOrder: number;
+  isActive: boolean;
+  academicYearId: string;
+};
+
 const semesterSelect =
   "id, name, code, start_date, end_date, sort_order, is_active, academic_year_id, created_at, update_at";
 
 /** Supabase table: `Semester` */
 export async function getSemesters(): Promise<Semester[]> {
   const supabase = createClient();
-  const { data: Semester, error } = await supabase
+  const { data, error } = await supabase
     .from("Semester")
     .select(semesterSelect)
+    .order("academic_year_id", { ascending: true })
     .order("sort_order", { ascending: true });
 
   if (error) {
@@ -58,11 +92,41 @@ export async function getSemesters(): Promise<Semester[]> {
     throw error;
   }
 
-  return ((Semester ?? []) as SemesterRow[]).map(mapSemesterRow);
+  return ((data ?? []) as SemesterRow[]).map(mapSemesterRow);
+}
+
+export async function getSemesterById(id: string): Promise<Semester | null> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("Semester")
+    .select(semesterSelect)
+    .eq("id", Number(id))
+    .single();
+  if (error) {
+    console.error("getSemesterById error:", error);
+    throw error;
+  }
+  return data ? mapSemesterRow(data as SemesterRow) : null;
+}
+
+export async function getSemesterGreaterThanCurrent(
+  currentDate: Date,
+): Promise<Semester[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("Semester")
+    .select(semesterSelect)
+    .gt("start_date", format(currentDate, "yyyy-MM-dd"))
+    .order("start_date", { ascending: true });
+  if (error) {
+    console.error("getSemesterGreaterThanCurrent error:", error);
+    throw error;
+  }
+  return ((data ?? []) as SemesterRow[]).map(mapSemesterRow);
 }
 
 export async function createSemester(
-  semester: Omit<Semester, "createdAt" | "updatedAt">,
+  semester: CreateSemesterInput,
 ): Promise<void> {
   const supabase = createClient();
   const { error } = await supabase.from("Semester").insert({
@@ -83,9 +147,11 @@ export async function createSemester(
   }
 }
 
-export async function updateSemester(semester: Semester): Promise<void> {
+export async function updateSemester(
+  semester: UpdateSemesterInput,
+): Promise<Semester> {
   const supabase = createClient();
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("Semester")
     .update({
       name: semester.name,
@@ -99,11 +165,33 @@ export async function updateSemester(semester: Semester): Promise<void> {
         : null,
       update_at: new Date().toISOString(),
     })
-    .eq("id", Number(semester.id));
+    .eq("id", Number(semester.id))
+    .select(semesterSelect)
+    .single();
   if (error) {
     console.error("updateSemester error:", error);
     throw error;
   }
+  if (!data) {
+    throw new Error("Semester not found");
+  }
+  return mapSemesterRow(data);
+}
+
+export async function saveSemester(
+  semester: SaveSemesterInput,
+): Promise<Semester> {
+  if (semester.id) {
+    const existing = await getSemesterById(semester.id);
+    if (!existing) {
+      throw new Error("Semester not found");
+    }
+    return updateSemester({
+      ...semester,
+      isActive: existing.isActive,
+    } as UpdateSemesterInput);
+  }
+  return createSemester(semester as CreateSemesterInput) as unknown as Semester;
 }
 
 export async function deleteSemester(id: string): Promise<void> {
@@ -116,4 +204,13 @@ export async function deleteSemester(id: string): Promise<void> {
     console.error("deleteSemester error:", error);
     throw error;
   }
+}
+
+export async function toggleSemesterStatus(
+  semester: UpdateSemesterInput,
+): Promise<Semester> {
+  return updateSemester({
+    ...semester,
+    isActive: !semester.isActive,
+  } as UpdateSemesterInput);
 }

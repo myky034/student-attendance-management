@@ -6,6 +6,8 @@ import {
   Users,
   BookA,
   Calendar,
+  Clock4,
+  CalendarClock,
 } from "lucide-react";
 import { Badge } from "../../components/ui/badge";
 import {
@@ -15,6 +17,9 @@ import {
   TabsTrigger,
 } from "../../components/ui/tabs";
 import { UserManagement } from "@/components/settings/UserManagement";
+import { AcademicYears } from "@/components/settings/AcademicYears";
+import { Semester } from "@/components/settings/Semester";
+import { AttendancePeriodConfig } from "@/components/settings/AttendancePeriodConfig";
 
 export function Settings() {
   return (
@@ -46,12 +51,27 @@ export function Settings() {
         </Badge>
       </motion.header>
 
-      <Tabs defaultValue="users" className="w-full">
-        <TabsList className="grid w-full grid-cols-4 max-w-md">
-          <TabsTrigger value="users" className="flex items-center gap-2">
-            <Users size={16} />
-            Users
+      <Tabs defaultValue="academic-years" className="w-full">
+        <TabsList className="grid w-full grid-cols-6">
+          <TabsTrigger
+            value="academic-years"
+            className="flex items-center gap-2"
+          >
+            <Clock4 size={16} />
+            Academic Years
           </TabsTrigger>
+          <TabsTrigger value="semesters" className="flex items-center gap-2">
+            <Calendar size={16} />
+            Semesters
+          </TabsTrigger>
+          <TabsTrigger
+            value="attendance-period"
+            className="flex items-center gap-2"
+          >
+            <CalendarClock size={16} />
+            Attendance Period
+          </TabsTrigger>
+
           <TabsTrigger value="grades" className="flex items-center gap-2">
             <GraduationCap size={16} />
             Grades
@@ -60,9 +80,9 @@ export function Settings() {
             <BookA size={16} />
             Classes
           </TabsTrigger>
-          <TabsTrigger value="semesters" className="flex items-center gap-2">
-            <Calendar size={16} />
-            Semesters
+          <TabsTrigger value="users" className="flex items-center gap-2">
+            <Users size={16} />
+            Users
           </TabsTrigger>
         </TabsList>
 
@@ -101,18 +121,15 @@ export function Settings() {
         </TabsContent>
 
         <TabsContent value="semesters" className="mt-6">
-          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-12 text-center">
-            <Calendar
-              size={48}
-              className="mx-auto text-zinc-300 dark:text-zinc-700 mb-4"
-            />
-            <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50 mb-2">
-              Semesters Management
-            </h3>
-            <p className="text-zinc-500 dark:text-zinc-400">
-              Semester management features will be available soon
-            </p>
-          </div>
+          <Semester />
+        </TabsContent>
+
+        <TabsContent value="academic-years" className="mt-6">
+          <AcademicYears />
+        </TabsContent>
+
+        <TabsContent value="attendance-period" className="mt-6">
+          <AttendancePeriodConfig />
         </TabsContent>
       </Tabs>
     </div>

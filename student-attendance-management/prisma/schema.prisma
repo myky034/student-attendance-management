@@ -50,47 +50,59 @@ model User {
 }
 
 model AttendanceRecord {
-  id               String           @id @default(cuid())
-  date             DateTime         @db.Date
-  status           AttendanceStatus
-  timestamp        DateTime         @default(now())
-  studentId        String
-  createdById      String
-  semedter_id      BigInt?
-  academic_year_id BigInt?
-  class_id         String?
-  AcademicYear     AcademicYear?    @relation(fields: [academic_year_id], references: [id], onUpdate: NoAction)
-  Class            Class?           @relation(fields: [class_id], references: [id], onUpdate: NoAction)
-  createdBy        User             @relation("CreatedByAttendance", fields: [createdById], references: [id])
-  Semester         Semester?        @relation(fields: [semedter_id], references: [id], onUpdate: NoAction)
-  student          User             @relation("StudentAttendance", fields: [studentId], references: [id])
+  id          String           @id @default(cuid())
+  date        DateTime         @db.Date
+  status      AttendanceStatus
+  timestamp   DateTime         @default(now())
+  studentId   String
+  createdById String
+  semedter_id BigInt?
+  class_id    String?
+  Class       Class?           @relation(fields: [class_id], references: [id], onUpdate: NoAction)
+  createdBy   User             @relation("CreatedByAttendance", fields: [createdById], references: [id])
+  Semester    Semester?        @relation(fields: [semedter_id], references: [id], onUpdate: NoAction)
+  student     User             @relation("StudentAttendance", fields: [studentId], references: [id])
 }
 
 model AcademicYear {
-  id               BigInt             @id @default(autoincrement())
-  name             String?            @db.VarChar
-  start_date       DateTime?          @db.Date
-  end_date         DateTime?          @db.Date
-  is_active        Boolean?
-  created_at       DateTime           @default(now()) @db.Timestamptz(6)
-  update_at        DateTime?          @default(now()) @db.Timestamptz(6)
-  AttendanceRecord AttendanceRecord[]
-  Semester         Semester[]
+  id         BigInt     @id @default(autoincrement())
+  name       String?    @db.VarChar
+  start_date DateTime?  @db.Date
+  end_date   DateTime?  @db.Date
+  is_active  Boolean?
+  created_at DateTime   @default(now()) @db.Timestamptz(6)
+  update_at  DateTime?  @default(now()) @db.Timestamptz(6)
+  Semester   Semester[]
 }
 
 model Semester {
-  id               BigInt             @id @default(autoincrement())
-  name             String             @db.VarChar
-  code             String?            @db.VarChar
-  start_date       DateTime?          @db.Date
-  end_date         DateTime?          @db.Date
-  sort_order       Decimal?           @db.Decimal
-  is_active        Boolean?
-  created_at       DateTime           @default(now()) @db.Timestamptz(6)
-  update_at        DateTime?          @default(now()) @db.Timestamptz(6)
-  academic_year_id BigInt?
-  AttendanceRecord AttendanceRecord[]
-  AcademicYear     AcademicYear?      @relation(fields: [academic_year_id], references: [id], onUpdate: NoAction)
+  id                     BigInt                   @id @default(autoincrement())
+  name                   String                   @db.VarChar
+  code                   String?                  @db.VarChar
+  start_date             DateTime?                @db.Date
+  end_date               DateTime?                @db.Date
+  sort_order             Decimal?                 @db.Decimal
+  is_active              Boolean?
+  created_at             DateTime                 @default(now()) @db.Timestamptz(6)
+  update_at              DateTime?                @default(now()) @db.Timestamptz(6)
+  academic_year_id       BigInt?
+  AttendancePeriodConfig AttendancePeriodConfig[]
+  AttendanceRecord       AttendanceRecord[]
+  AcademicYear           AcademicYear?            @relation(fields: [academic_year_id], references: [id], onUpdate: NoAction)
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model AttendancePeriodConfig {
+  id          BigInt                @id @default(autoincrement())
+  semester_id BigInt?
+  name        String                @db.VarChar
+  type        AttendancePeriodType?
+  start_date  DateTime?             @db.Date
+  end_date    DateTime?             @db.Date
+  is_active   Boolean?
+  created_at  DateTime              @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime              @default(now()) @db.Timestamptz(6)
+  Semester    Semester?             @relation(fields: [semester_id], references: [id], onUpdate: NoAction)
 }
 
 enum UserRole {
@@ -103,4 +115,9 @@ enum AttendanceStatus {
   present
   absent
   excused_absence
+}
+
+enum AttendancePeriodType {
+  sunday
+  regular
 }

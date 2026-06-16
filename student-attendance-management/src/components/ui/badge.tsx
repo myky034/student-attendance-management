@@ -15,8 +15,7 @@ const badgeVariants = cva(
           "border-transparent bg-green-500 text-white [a&]:hover:bg-green-500/90",
         warning:
           "border-transparent bg-yellow-500 text-white [a&]:hover:bg-yellow-500/90",
-        info:
-          "border-transparent bg-blue-500 text-white [a&]:hover:bg-blue-500/90",
+        info: "border-transparent bg-blue-500 text-white [a&]:hover:bg-blue-500/90",
         danger:
           "border-transparent bg-red-500 text-white [a&]:hover:bg-red-500/90",
         secondary:
@@ -51,4 +50,4 @@ function Badge({
   );
 }
 
-export { Badge, badgeVariants };
+export { Badge };
