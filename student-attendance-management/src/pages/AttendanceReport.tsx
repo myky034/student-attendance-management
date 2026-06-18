@@ -18,6 +18,11 @@ import {
 } from "@/lib/api/attendancerecord";
 import { getAcademicYears, type AcademicYear } from "@/lib/api/academicyear";
 import { getSemesters, type Semester } from "@/lib/api/semester";
+import { getClassById } from "@/lib/api/classes";
+import {
+  getActiveAttendancePeriodConfigsByType,
+  type AttendancePeriodConfig,
+} from "@/lib/api/attendanceperiodconfig";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -131,7 +136,14 @@ function buildAttendanceMatrixSheet(
     return worksheet;
   }
 
-  const headerRow = ["STT", "Name", ...sessionDays.map(formatHeaderDate), "P", "V", "E"];
+  const headerRow = [
+    "STT",
+    "Name",
+    ...sessionDays.map(formatHeaderDate),
+    "P",
+    "V",
+    "E",
+  ];
   const dataRows = matrixData.map((row) => [
     row.globalIndex,
     `${row.name}\n${row.qrCode ?? row.id}`,
@@ -209,32 +221,105 @@ function getSundaysBetween(startDate: string, endDate: string): string[] {
   return days;
 }
 
-function getRegularDaysBetween(startDate: string, endDate: string): string[] {
-  const start = new Date(toDateString(startDate));
-  const end = new Date(toDateString(endDate));
+function getMonthsFromPeriodConfigs(
+  configs: AttendancePeriodConfig[],
+): string[] {
+  const months = new Set<string>();
 
-  if (
-    Number.isNaN(start.getTime()) ||
-    Number.isNaN(end.getTime()) ||
-    start > end
-  ) {
+  configs.forEach((config) => {
+    const start = new Date(toDateString(config.startDate));
+    const end = new Date(toDateString(config.endDate));
+
+    if (
+      Number.isNaN(start.getTime()) ||
+      Number.isNaN(end.getTime()) ||
+      start > end
+    ) {
+      return;
+    }
+
+    const current = new Date(start.getFullYear(), start.getMonth(), 1);
+    const lastMonth = new Date(end.getFullYear(), end.getMonth(), 1);
+
+    while (current <= lastMonth) {
+      const y = current.getFullYear();
+      const m = String(current.getMonth() + 1).padStart(2, "0");
+      months.add(`${y}-${m}`);
+      current.setMonth(current.getMonth() + 1);
+    }
+  });
+
+  return [...months].sort();
+}
+
+function getRegularDaysFromPeriodConfigs(
+  configs: AttendancePeriodConfig[],
+  month: string,
+): string[] {
+  const [yearStr, monthStr] = month.split("-");
+  const year = Number(yearStr);
+  const monthIndex = Number(monthStr) - 1;
+
+  if (!year || Number.isNaN(monthIndex) || monthIndex < 0 || monthIndex > 11) {
     return [];
   }
 
+  const monthStart = new Date(year, monthIndex, 1);
+  const monthEnd = new Date(year, monthIndex + 1, 0);
   const days: string[] = [];
-  const current = new Date(start);
+  const current = new Date(monthStart);
 
-  while (current <= end) {
+  while (current <= monthEnd) {
     if (current.getDay() !== 0) {
-      const y = current.getFullYear();
-      const m = String(current.getMonth() + 1).padStart(2, "0");
-      const d = String(current.getDate()).padStart(2, "0");
-      days.push(`${y}-${m}-${d}`);
+      const dateStr = toDateString(current);
+      const inConfig = configs.some((config) => {
+        const start = toDateString(config.startDate);
+        const end = toDateString(config.endDate);
+        return dateStr >= start && dateStr <= end;
+      });
+
+      if (inConfig) {
+        days.push(dateStr);
+      }
     }
     current.setDate(current.getDate() + 1);
   }
 
   return days;
+}
+
+function getDefaultMonthForDate(availableMonths: string[], date: Date): string {
+  if (availableMonths.length === 0) return "";
+
+  const currentMonth = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+  if (availableMonths.includes(currentMonth)) {
+    return currentMonth;
+  }
+
+  return availableMonths[availableMonths.length - 1] ?? "";
+}
+
+function formatMonthLabel(month: string): string {
+  const [year, monthNum] = month.split("-");
+  return `${monthNum}/${year}`;
+}
+
+function mergeDateRanges(
+  ranges: Array<{ dateFrom: string; dateTo: string } | null>,
+): { dateFrom: string; dateTo: string } | null {
+  const validRanges = ranges.filter(
+    (range): range is { dateFrom: string; dateTo: string } => range != null,
+  );
+
+  if (validRanges.length === 0) return null;
+
+  return validRanges.reduce(
+    (acc, range) => ({
+      dateFrom: range.dateFrom < acc.dateFrom ? range.dateFrom : acc.dateFrom,
+      dateTo: range.dateTo > acc.dateTo ? range.dateTo : acc.dateTo,
+    }),
+    validRanges[0],
+  );
 }
 
 function buildMatrixData(
@@ -322,23 +407,27 @@ type AttendanceMatrixReportProps = {
   filtersError: string;
   students: StudentRecord[];
   user: User | null;
-  semesterLabel: string;
+  periodLabel: string;
   selectedAcademicYear: AcademicYear | null;
   attendanceLoading: boolean;
   searchTerm: string;
   onSearchTermChange: (value: string) => void;
-  selectedAcademicYearId: string;
-  onAcademicYearChange: (academicYearId: string) => void;
-  academicYearsList: AcademicYear[];
-  selectedSemester: Semester | null;
-  onSemesterChange: (semesterId: string) => void;
-  availableSemesters: Semester[];
   rowsPerPage: number;
   onRowsPerPageChange: (rowsPerPage: number) => void;
   filteredStudentCount: number;
   formatHeaderDate: (dateStr: string) => string;
   selectClassName: string;
   splitSessions?: boolean;
+  filterMode?: "semester" | "month";
+  selectedAcademicYearId?: string;
+  onAcademicYearChange?: (academicYearId: string) => void;
+  academicYearsList?: AcademicYear[];
+  selectedSemester?: Semester | null;
+  onSemesterChange?: (semesterId: string) => void;
+  availableSemesters?: Semester[];
+  selectedMonth?: string;
+  onMonthChange?: (month: string) => void;
+  availableMonths?: string[];
 };
 
 function AttendanceMatrixReport({
@@ -353,23 +442,27 @@ function AttendanceMatrixReport({
   filtersError,
   students,
   user,
-  semesterLabel,
+  periodLabel,
   selectedAcademicYear,
   attendanceLoading,
   searchTerm,
   onSearchTermChange,
-  selectedAcademicYearId,
-  onAcademicYearChange,
-  academicYearsList,
-  selectedSemester,
-  onSemesterChange,
-  availableSemesters,
   rowsPerPage,
   onRowsPerPageChange,
   filteredStudentCount,
   formatHeaderDate,
   selectClassName,
   splitSessions = true,
+  filterMode = "semester",
+  selectedAcademicYearId = "",
+  onAcademicYearChange,
+  academicYearsList = [],
+  selectedSemester = null,
+  onSemesterChange,
+  availableSemesters = [],
+  selectedMonth = "",
+  onMonthChange,
+  availableMonths = [],
 }: AttendanceMatrixReportProps) {
   const [page, setPage] = useState(1);
 
@@ -429,9 +522,11 @@ function AttendanceMatrixReport({
               />
             </div>
             <CardDescription className="mt-1">
-              {semesterLabel}
-              {selectedAcademicYear ? ` · ${selectedAcademicYear.name}` : ""} ·{" "}
-              {reportSummary.sessionCount} {sessionCountLabel}
+              {periodLabel}
+              {filterMode === "semester" && selectedAcademicYear
+                ? ` · ${selectedAcademicYear.name}`
+                : ""}{" "}
+              · {reportSummary.sessionCount} {sessionCountLabel}
               {attendanceLoading && (
                 <span className="ml-2 inline-flex items-center gap-1 text-indigo-500">
                   <Loader2 size={12} className="animate-spin" />
@@ -485,44 +580,69 @@ function AttendanceMatrixReport({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-2">
-              <CalendarDays size={16} className="text-zinc-400" />
-              <select
-                value={selectedAcademicYearId}
-                onChange={(e) => onAcademicYearChange(e.target.value)}
-                className={selectClassName}
-                aria-label="Academic year"
-                disabled={academicYearsList.length === 0}
-              >
-                {academicYearsList.length === 0 ? (
-                  <option value="">No academic year</option>
-                ) : (
-                  academicYearsList.map((year) => (
-                    <option key={year.id} value={year.id}>
-                      {year.name}
-                    </option>
-                  ))
-                )}
-              </select>
-            </div>
+            {filterMode === "semester" ? (
+              <>
+                <div className="flex items-center gap-2">
+                  <CalendarDays size={16} className="text-zinc-400" />
+                  <select
+                    value={selectedAcademicYearId}
+                    onChange={(e) => onAcademicYearChange?.(e.target.value)}
+                    className={selectClassName}
+                    aria-label="Academic year"
+                    disabled={academicYearsList.length === 0}
+                  >
+                    {academicYearsList.length === 0 ? (
+                      <option value="">No academic year</option>
+                    ) : (
+                      academicYearsList.map((year) => (
+                        <option key={year.id} value={year.id}>
+                          {year.name}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </div>
 
-            <select
-              value={selectedSemester?.id ?? ""}
-              onChange={(e) => onSemesterChange(e.target.value)}
-              className={selectClassName}
-              aria-label="Semester"
-              disabled={availableSemesters.length === 0}
-            >
-              {availableSemesters.length === 0 ? (
-                <option value="">No semester</option>
-              ) : (
-                availableSemesters.map((semesterOption) => (
-                  <option key={semesterOption.id} value={semesterOption.id}>
-                    {semesterOption.name}
-                  </option>
-                ))
-              )}
-            </select>
+                <select
+                  value={selectedSemester?.id ?? ""}
+                  onChange={(e) => onSemesterChange?.(e.target.value)}
+                  className={selectClassName}
+                  aria-label="Semester"
+                  disabled={availableSemesters.length === 0}
+                >
+                  {availableSemesters.length === 0 ? (
+                    <option value="">No semester</option>
+                  ) : (
+                    availableSemesters.map((semesterOption) => (
+                      <option key={semesterOption.id} value={semesterOption.id}>
+                        {semesterOption.name}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </>
+            ) : (
+              <div className="flex items-center gap-2">
+                <CalendarDays size={16} className="text-zinc-400" />
+                <select
+                  value={selectedMonth}
+                  onChange={(e) => onMonthChange?.(e.target.value)}
+                  className={selectClassName}
+                  aria-label="Month"
+                  disabled={availableMonths.length === 0}
+                >
+                  {availableMonths.length === 0 ? (
+                    <option value="">No month configured</option>
+                  ) : (
+                    availableMonths.map((month) => (
+                      <option key={month} value={month}>
+                        {formatMonthLabel(month)}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </div>
+            )}
 
             <select
               value={rowsPerPage}
@@ -573,10 +693,16 @@ function AttendanceMatrixReport({
               No students found matching the search criteria.
             </p>
           </div>
-        ) : !selectedSemester ? (
+        ) : filterMode === "semester" && !selectedSemester ? (
           <div className="rounded-2xl border border-dashed border-zinc-200 py-16 text-center dark:border-zinc-800">
             <p className="text-zinc-500 dark:text-zinc-400">
               No semester configured for the selected academic year.
+            </p>
+          </div>
+        ) : filterMode === "month" && sessionDays.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-zinc-200 py-16 text-center dark:border-zinc-800">
+            <p className="text-zinc-500 dark:text-zinc-400">
+              No regular class days configured for the selected month.
             </p>
           </div>
         ) : (
@@ -990,6 +1116,40 @@ export function AttendanceReport() {
   const [selectedSemesterId, setSelectedSemesterId] = useState("");
   const [filtersLoading, setFiltersLoading] = useState(true);
   const [filtersError, setFiltersError] = useState("");
+  const [isSpecialClass, setIsSpecialClass] = useState(false);
+  const [regularPeriodConfigs, setRegularPeriodConfigs] = useState<
+    AttendancePeriodConfig[]
+  >([]);
+  const [selectedMonth, setSelectedMonth] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void (async () => {
+      if (!user?.classId) {
+        if (!cancelled) {
+          setIsSpecialClass(false);
+        }
+        return;
+      }
+
+      try {
+        const classInfo = await getClassById(user.classId);
+        if (!cancelled) {
+          setIsSpecialClass(classInfo?.isSpecialClass === true);
+        }
+      } catch (err) {
+        console.error("Failed to load class info:", err);
+        if (!cancelled) {
+          setIsSpecialClass(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.classId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -999,10 +1159,16 @@ export function AttendanceReport() {
       setFiltersError("");
 
       try {
-        const [years, semesters] = await Promise.all([
+        const requests: [
+          Promise<AcademicYear[]>,
+          Promise<Semester[]>,
+          Promise<AttendancePeriodConfig[]>,
+        ] = [
           getAcademicYears(),
           getSemesters(),
-        ]);
+          getActiveAttendancePeriodConfigsByType("regular"),
+        ];
+        const [years, semesters, regularConfigs] = await Promise.all(requests);
         if (cancelled) return;
 
         const sortedYears = [...years].sort(
@@ -1013,9 +1179,12 @@ export function AttendanceReport() {
         const activeSemesters = semesters
           .filter((semester) => semester.isActive)
           .sort((a, b) => a.sortOrder - b.sortOrder);
+        const availableMonths = getMonthsFromPeriodConfigs(regularConfigs);
 
         setAcademicYearsList(sortedYears);
         setSemestersList(activeSemesters);
+        setRegularPeriodConfigs(regularConfigs);
+        setSelectedMonth(getDefaultMonthForDate(availableMonths, new Date()));
 
         const today = new Date();
         const defaultYear = getAcademicYearForDate(sortedYears, today);
@@ -1034,9 +1203,11 @@ export function AttendanceReport() {
           getDefaultSemesterForDate(defaultSemesters, today)?.id ?? "",
         );
       } catch (err) {
-        console.error("Failed to load academic years / semesters:", err);
+        console.error("Failed to load attendance report filters:", err);
         if (!cancelled) {
-          setFiltersError("Unable to load academic year or semester list.");
+          setFiltersError(
+            "Unable to load academic year, semester, or attendance period config.",
+          );
         }
       } finally {
         if (!cancelled) {
@@ -1104,17 +1275,19 @@ export function AttendanceReport() {
 
   const sundaySet = useMemo(() => new Set(sundays), [sundays]);
 
+  const availableMonths = useMemo(
+    () => getMonthsFromPeriodConfigs(regularPeriodConfigs),
+    [regularPeriodConfigs],
+  );
+
   const regularDays = useMemo(() => {
-    if (!selectedSemester) return [];
-    return getRegularDaysBetween(
-      selectedSemester.startDate,
-      selectedSemester.endDate,
-    );
-  }, [selectedSemester]);
+    if (!selectedMonth) return [];
+    return getRegularDaysFromPeriodConfigs(regularPeriodConfigs, selectedMonth);
+  }, [regularPeriodConfigs, selectedMonth]);
 
   const regularDaySet = useMemo(() => new Set(regularDays), [regularDays]);
 
-  const semesterDateRange = useMemo(() => {
+  const sundayDateRange = useMemo(() => {
     if (!selectedSemester) return null;
     return {
       dateFrom: toDateString(selectedSemester.startDate),
@@ -1122,11 +1295,24 @@ export function AttendanceReport() {
     };
   }, [selectedSemester]);
 
+  const regularDateRange = useMemo(() => {
+    if (!isSpecialClass || regularDays.length === 0) return null;
+    return {
+      dateFrom: regularDays[0],
+      dateTo: regularDays[regularDays.length - 1],
+    };
+  }, [isSpecialClass, regularDays]);
+
+  const attendanceFetchRange = useMemo(
+    () => mergeDateRanges([sundayDateRange, regularDateRange]),
+    [sundayDateRange, regularDateRange],
+  );
+
   useEffect(() => {
     let cancelled = false;
 
     void (async () => {
-      if (students.length === 0 || !semesterDateRange) {
+      if (students.length === 0 || !attendanceFetchRange) {
         if (!cancelled) {
           setAttendanceByStudent({});
           setAttendanceLoading(false);
@@ -1138,8 +1324,8 @@ export function AttendanceReport() {
       try {
         const records = await getAttendanceRecordsByStudentIds({
           studentIds: students.map((student) => student.id),
-          dateFrom: semesterDateRange.dateFrom,
-          dateTo: semesterDateRange.dateTo,
+          dateFrom: attendanceFetchRange.dateFrom,
+          dateTo: attendanceFetchRange.dateTo,
         });
         if (cancelled) return;
         setAttendanceByStudent(groupAttendanceByStudent(records));
@@ -1158,7 +1344,7 @@ export function AttendanceReport() {
     return () => {
       cancelled = true;
     };
-  }, [students, semesterDateRange]);
+  }, [students, attendanceFetchRange]);
 
   const formatHeaderDate = (dateStr: string) => {
     const [, m, d] = dateStr.split("-");
@@ -1180,9 +1366,13 @@ export function AttendanceReport() {
     students[0]?.class?.name ??
     (user?.classId ? `Class ${user.classId.slice(0, 8)}...` : "—");
 
-  const semesterLabel = selectedSemester
+  const sundayPeriodLabel = selectedSemester
     ? `${selectedSemester.name} (${formatHeaderDate(toDateString(selectedSemester.startDate))} – ${formatHeaderDate(toDateString(selectedSemester.endDate))})`
     : "No semester selected";
+
+  const regularPeriodLabel = selectedMonth
+    ? `Month ${formatMonthLabel(selectedMonth)}`
+    : "No month selected";
 
   const handleAcademicYearChange = (academicYearId: string) => {
     setSelectedAcademicYearId(academicYearId);
@@ -1197,14 +1387,23 @@ export function AttendanceReport() {
     }
   };
 
+  const activeReportTab: "sunday" | "regular" =
+    isSpecialClass && reportTab === "regular" ? "regular" : "sunday";
+
   const sundayMatrixData = useMemo(
-    () => buildMatrixData(filteredStudents, attendanceByStudent, sundaySet, true),
+    () =>
+      buildMatrixData(filteredStudents, attendanceByStudent, sundaySet, true),
     [filteredStudents, sundaySet, attendanceByStudent],
   );
 
   const regularMatrixData = useMemo(
     () =>
-      buildMatrixData(filteredStudents, attendanceByStudent, regularDaySet, false),
+      buildMatrixData(
+        filteredStudents,
+        attendanceByStudent,
+        regularDaySet,
+        false,
+      ),
     [filteredStudents, regularDaySet, attendanceByStudent],
   );
 
@@ -1219,20 +1418,21 @@ export function AttendanceReport() {
   );
 
   const activeMatrixData =
-    reportTab === "sunday" ? sundayMatrixData : regularMatrixData;
-  const activeSessionDays = reportTab === "sunday" ? sundays : regularDays;
+    activeReportTab === "sunday" ? sundayMatrixData : regularMatrixData;
+  const activeSessionDays =
+    activeReportTab === "sunday" ? sundays : regularDays;
 
   const selectClassName =
     "rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100";
 
-  const sharedReportPanelProps = {
+  const sharedSundayReportPanelProps = {
     loading,
     filtersLoading,
     fetchError,
     filtersError,
     students,
     user,
-    semesterLabel,
+    periodLabel: sundayPeriodLabel,
     selectedAcademicYear,
     attendanceLoading,
     searchTerm,
@@ -1248,10 +1448,44 @@ export function AttendanceReport() {
     filteredStudentCount: filteredStudents.length,
     formatHeaderDate,
     selectClassName,
+    filterMode: "semester" as const,
+  };
+
+  const sharedRegularReportPanelProps = {
+    loading,
+    filtersLoading,
+    fetchError,
+    filtersError,
+    students,
+    user,
+    periodLabel: regularPeriodLabel,
+    selectedAcademicYear: null,
+    attendanceLoading,
+    searchTerm,
+    onSearchTermChange: setSearchTerm,
+    rowsPerPage,
+    onRowsPerPageChange: setRowsPerPage,
+    filteredStudentCount: filteredStudents.length,
+    formatHeaderDate,
+    selectClassName,
+    filterMode: "month" as const,
+    selectedMonth,
+    onMonthChange: setSelectedMonth,
+    availableMonths,
   };
 
   const handleExport = () => {
-    if (activeMatrixData.length === 0 || !selectedSemester) {
+    if (activeMatrixData.length === 0) {
+      toast.error("Không có dữ liệu để xuất");
+      return;
+    }
+
+    if (activeReportTab === "sunday" && !selectedSemester) {
+      toast.error("Không có dữ liệu để xuất");
+      return;
+    }
+
+    if (activeReportTab === "regular" && regularDays.length === 0) {
       toast.error("Không có dữ liệu để xuất");
       return;
     }
@@ -1260,16 +1494,20 @@ export function AttendanceReport() {
       activeMatrixData,
       activeSessionDays,
       formatHeaderDate,
-      reportTab === "sunday",
+      activeReportTab === "sunday",
     );
 
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Diem danh");
 
     const exportPrefix =
-      reportTab === "sunday" ? "Diem_danh_CN" : "Diem_danh_thuong";
+      activeReportTab === "sunday" ? "Diem_danh_CN" : "Diem_danh_thuong";
+    const periodSuffix =
+      activeReportTab === "sunday"
+        ? `${selectedAcademicYear?.name ?? "nam_hoc"}_${selectedSemester?.code || selectedSemester?.name || "hoc_ky"}`
+        : formatMonthLabel(selectedMonth).replace("/", "-");
     const fileName = sanitizeFileName(
-      `${exportPrefix}_${selectedAcademicYear?.name ?? "nam_hoc"}_${selectedSemester.code || selectedSemester.name}_${displayClassName}.xlsx`,
+      `${exportPrefix}_${periodSuffix}_${displayClassName}.xlsx`,
     );
 
     XLSX.writeFile(workbook, fileName);
@@ -1313,22 +1551,29 @@ export function AttendanceReport() {
       </div>
 
       <Tabs
-        value={reportTab}
-        onValueChange={(value) => setReportTab(value as "sunday" | "regular")}
+        value={activeReportTab}
+        onValueChange={(value) => {
+          if (value === "regular" && !isSpecialClass) return;
+          setReportTab(value as "sunday" | "regular");
+        }}
         className="w-full"
       >
-        <TabsList className="grid w-full grid-cols-2 max-w-md">
+        <TabsList
+          className={`grid w-full max-w-md ${isSpecialClass ? "grid-cols-2" : "grid-cols-1"}`}
+        >
           <TabsTrigger value="sunday" className="flex items-center gap-2">
             Sunday Attendance
           </TabsTrigger>
-          <TabsTrigger value="regular" className="flex items-center gap-2">
-            Regular Attendance
-          </TabsTrigger>
+          {isSpecialClass && (
+            <TabsTrigger value="regular" className="flex items-center gap-2">
+              Regular Attendance
+            </TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="sunday" className="mt-6">
           <AttendanceMatrixReport
-            {...sharedReportPanelProps}
+            {...sharedSundayReportPanelProps}
             title="Sunday Attendance Table"
             sessionDays={sundays}
             sessionCountLabel="Sunday sessions"
@@ -1338,17 +1583,19 @@ export function AttendanceReport() {
           />
         </TabsContent>
 
-        <TabsContent value="regular" className="mt-6">
-          <AttendanceMatrixReport
-            {...sharedReportPanelProps}
-            title="Regular Attendance Table"
-            sessionDays={regularDays}
-            sessionCountLabel="regular class days (Mon-Sat)"
-            matrixData={regularMatrixData}
-            reportSummary={regularReportSummary}
-            splitSessions={false}
-          />
-        </TabsContent>
+        {isSpecialClass && (
+          <TabsContent value="regular" className="mt-6">
+            <AttendanceMatrixReport
+              {...sharedRegularReportPanelProps}
+              title="Regular Attendance Table"
+              sessionDays={regularDays}
+              sessionCountLabel="regular class days (Mon-Sat)"
+              matrixData={regularMatrixData}
+              reportSummary={regularReportSummary}
+              splitSessions={false}
+            />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );

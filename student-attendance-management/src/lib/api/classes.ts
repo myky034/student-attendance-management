@@ -4,15 +4,17 @@ export type ClassOption = {
   id: string;
   name: string;
   grade: { id: string; name: string } | null;
+  isSpecialClass: boolean;
 };
 
 type ClassRow = {
   id: string;
   name: string;
+  is_special_class: boolean | null;
   grade: { id: string; name: string } | { id: string; name: string }[] | null;
 };
 
-const classSelect = "id, name, grade:Grade(id, name)";
+const classSelect = "id, name, is_special_class, grade:Grade(id, name)";
 
 export function mapClassRow(row: ClassRow): ClassOption {
   const grade = Array.isArray(row.grade) ? (row.grade[0] ?? null) : row.grade;
@@ -20,6 +22,7 @@ export function mapClassRow(row: ClassRow): ClassOption {
     id: row.id,
     name: row.name,
     grade,
+    isSpecialClass: row.is_special_class === true,
   };
 }
 
@@ -52,4 +55,20 @@ export async function getClassNameById(id: string): Promise<string | null> {
 
   if (!data) return null;
   return mapClassRow(data as unknown as ClassRow).name;
+}
+
+export async function getClassById(id: string): Promise<ClassOption | null> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("Class")
+    .select(classSelect)
+    .eq("id", id)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data) return null;
+  return mapClassRow(data as unknown as ClassRow);
 }

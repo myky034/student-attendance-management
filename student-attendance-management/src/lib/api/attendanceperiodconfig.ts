@@ -52,6 +52,35 @@ const attendancePeriodConfigSelect = `
     updated_at
 `;
 
+export type CreateAttendancePeriodConfigInput = {
+  name: string;
+  startDate: string;
+  endDate: string;
+  semesterId: string;
+  type: string;
+  isActive: boolean;
+};
+
+export type UpdateAttendancePeriodConfigInput = {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  semesterId: string;
+  type: string;
+  isActive: boolean;
+};
+
+export type SaveAttendancePeriodConfigInput = {
+  id?: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  semesterId: string;
+  type: string;
+  isActive: boolean;
+};
+
 export async function getAttendancePeriodConfigs(): Promise<
   AttendancePeriodConfig[]
 > {
@@ -70,6 +99,25 @@ export async function getAttendancePeriodConfigs(): Promise<
   );
 }
 
+export async function getActiveAttendancePeriodConfigsByType(
+  type: "sunday" | "regular",
+): Promise<AttendancePeriodConfig[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("AttendancePeriodConfig")
+    .select(attendancePeriodConfigSelect)
+    .eq("type", type)
+    .eq("is_active", true)
+    .order("start_date", { ascending: true });
+  if (error) {
+    console.error("getActiveAttendancePeriodConfigsByType error:", error);
+    throw error;
+  }
+  return ((data ?? []) as AttendancePeriodConfigRow[]).map(
+    mapAttendancePeriodConfigRow,
+  );
+}
+
 export async function getAttendancePeriodConfigById(
   id: string,
 ): Promise<AttendancePeriodConfig | null> {
@@ -77,7 +125,7 @@ export async function getAttendancePeriodConfigById(
   const { data, error } = await supabase
     .from("AttendancePeriodConfig")
     .select(attendancePeriodConfigSelect)
-    .eq("id", id)
+    .eq("id", Number(id))
     .single();
   if (error) {
     console.error("getAttendancePeriodConfigById error:", error);
@@ -86,4 +134,109 @@ export async function getAttendancePeriodConfigById(
   return data
     ? mapAttendancePeriodConfigRow(data as unknown as AttendancePeriodConfigRow)
     : null;
+}
+
+export async function createAttendancePeriodConfig(
+  attendancePeriodConfig: CreateAttendancePeriodConfigInput,
+): Promise<AttendancePeriodConfig | null> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("AttendancePeriodConfig")
+    .insert({
+      name: attendancePeriodConfig.name,
+      start_date: attendancePeriodConfig.startDate,
+      end_date: attendancePeriodConfig.endDate,
+      semester_id: attendancePeriodConfig.semesterId
+        ? Number(attendancePeriodConfig.semesterId)
+        : null,
+      type: attendancePeriodConfig.type,
+      is_active: attendancePeriodConfig.isActive,
+      updated_at: new Date().toISOString(),
+    })
+    .select(attendancePeriodConfigSelect)
+    .single();
+  if (error) {
+    console.error("createAttendancePeriodConfig error:", error);
+    throw error;
+  }
+  return data
+    ? mapAttendancePeriodConfigRow(data as unknown as AttendancePeriodConfigRow)
+    : null;
+}
+
+export async function updateAttendancePeriodConfig(
+  attendancePeriodConfig: UpdateAttendancePeriodConfigInput,
+): Promise<AttendancePeriodConfig | null> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("AttendancePeriodConfig")
+    .update({
+      name: attendancePeriodConfig.name,
+      start_date: attendancePeriodConfig.startDate,
+      end_date: attendancePeriodConfig.endDate,
+      semester_id: attendancePeriodConfig.semesterId
+        ? Number(attendancePeriodConfig.semesterId)
+        : null,
+      type: attendancePeriodConfig.type,
+      is_active: attendancePeriodConfig.isActive,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", Number(attendancePeriodConfig.id))
+    .select(attendancePeriodConfigSelect)
+    .single();
+  if (error) {
+    console.error("updateAttendancePeriodConfig error:", error);
+    throw error;
+  }
+  return data
+    ? mapAttendancePeriodConfigRow(data as unknown as AttendancePeriodConfigRow)
+    : null;
+}
+
+export async function saveAttendancePeriodConfig(
+  attendancePeriodConfig: SaveAttendancePeriodConfigInput,
+): Promise<AttendancePeriodConfig | null> {
+  if (attendancePeriodConfig.id) {
+    return updateAttendancePeriodConfig({
+      id: attendancePeriodConfig.id,
+      name: attendancePeriodConfig.name,
+      startDate: attendancePeriodConfig.startDate,
+      endDate: attendancePeriodConfig.endDate,
+      semesterId: attendancePeriodConfig.semesterId,
+      type: attendancePeriodConfig.type,
+      isActive: attendancePeriodConfig.isActive,
+    });
+  }
+  return createAttendancePeriodConfig({
+    name: attendancePeriodConfig.name,
+    startDate: attendancePeriodConfig.startDate,
+    endDate: attendancePeriodConfig.endDate,
+    semesterId: attendancePeriodConfig.semesterId,
+    type: attendancePeriodConfig.type,
+    isActive: attendancePeriodConfig.isActive,
+  });
+}
+
+export async function deleteAttendancePeriodConfig(
+  id: string,
+): Promise<boolean> {
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("AttendancePeriodConfig")
+    .delete()
+    .eq("id", Number(id));
+  if (error) {
+    console.error("deleteAttendancePeriodConfig error:", error);
+    return false;
+  }
+  return true;
+}
+
+export async function toggleAttendancePeriodConfigStatus(
+  attendancePeriodConfig: AttendancePeriodConfig,
+): Promise<AttendancePeriodConfig | null> {
+  return updateAttendancePeriodConfig({
+    ...attendancePeriodConfig,
+    isActive: !attendancePeriodConfig.isActive,
+  });
 }

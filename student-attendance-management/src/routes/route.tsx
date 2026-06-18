@@ -11,6 +11,8 @@ import { Students } from "../pages/(admin)/Students";
 import { Settings } from "../pages/(admin)/Settings";
 import { UserFormDetail } from "@/pages/UserFormDetail";
 import { AttendanceReport } from "@/pages/AttendanceReport";
+import { ParentLayout } from "@/components/ParentLayout";
+import { ParentPortal } from "@/pages/ParentPortal";
 
 export const router = createBrowserRouter([
   {
@@ -20,6 +22,16 @@ export const router = createBrowserRouter([
   {
     path: "/login",
     Component: Login,
+  },
+  {
+    path: "/parent-portal",
+    Component: ParentLayout,
+    children: [
+      {
+        path: "",
+        Component: ParentPortal,
+      },
+    ],
   },
   {
     path: "/admin",

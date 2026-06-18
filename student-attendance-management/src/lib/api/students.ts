@@ -6,6 +6,7 @@ type CreateStudentInput = {
   username: string;
   password: string;
   qrCode: string;
+  user_code: string;
   classId: string;
   isActive: boolean;
   isLocked: boolean;
@@ -18,6 +19,7 @@ type UpdateStudentInput = {
   username: string;
   password?: string;
   qrCode: string;
+  user_code: string;
   classId: string;
   isActive: boolean;
   isLocked: boolean;
@@ -49,6 +51,15 @@ type AttendanceRecordRow = {
   createdById: string;
 };
 
+export type StudentAttendanceItem = {
+  id: string;
+  date: string;
+  status: string;
+  timestamp: string;
+  createdById: string;
+  createdByName: string;
+};
+
 type StudentRow = {
   id: string;
   name: string;
@@ -56,6 +67,7 @@ type StudentRow = {
   username: string;
   role: string;
   qrCode: string;
+  user_code: string;
   isActive: boolean;
   isDeleted: boolean;
   isLocked: boolean;
@@ -72,7 +84,7 @@ type StudentRow = {
   }[];
 };
 
-export type StudentRecord = Omit<StudentRow, "class"> & {
+export type StudentRecord = Omit<StudentRow, "class" | "studentAttendance"> & {
   createdAt: string;
   updatedAt: string;
   class: {
@@ -80,6 +92,7 @@ export type StudentRecord = Omit<StudentRow, "class"> & {
     name: string;
     grade: GradeRow | null;
   } | null;
+  studentAttendance: StudentAttendanceItem[];
   attendance: AttendanceRecordRow[];
 };
 
@@ -90,13 +103,71 @@ export type SaveStudentInput = {
   username: string;
   password?: string;
   qrCode: string;
+  user_code: string;
   classId: string;
   isActive: boolean;
   isLocked: boolean;
 };
 
-const studentSelect = `id, name, email, username, role, qrCode, isActive, isDeleted, isLocked, classId, createdAt, updatedAt,
+const studentSelect = `id, name, email, username, role, qrCode, user_code, isActive, isDeleted, isLocked, classId, createdAt, updatedAt,
   class:Class(id, name, grade:Grade(id, name, description, color, isActive))`;
+
+const studentAttendanceSelect =
+  "studentAttendance:AttendanceRecord!studentId(id, date, status, timestamp, createdById)";
+
+async function fetchCreatorNames(
+  creatorIds: string[],
+): Promise<Map<string, string>> {
+  if (creatorIds.length === 0) return new Map();
+
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("User")
+    .select("id, name")
+    .in("id", creatorIds);
+
+  if (error || !data) {
+    console.warn("fetchCreatorNames failed:", error?.message);
+    return new Map();
+  }
+
+  return new Map(data.map((user) => [user.id, user.name]));
+}
+
+async function enrichStudentRecordCreators(
+  record: StudentRecord,
+): Promise<StudentRecord> {
+  const creatorIds = [
+    ...new Set(
+      record.studentAttendance
+        .map((attendance) => attendance.createdById)
+        .filter(Boolean),
+    ),
+  ];
+
+  const nameById = await fetchCreatorNames(creatorIds);
+  if (nameById.size === 0) return record;
+
+  const studentAttendance = record.studentAttendance.map((attendance) => ({
+    ...attendance,
+    createdByName:
+      nameById.get(attendance.createdById) ?? attendance.createdByName,
+  }));
+
+  return {
+    ...record,
+    studentAttendance,
+    attendance: studentAttendance.map(
+      ({ id, date, status, timestamp, createdById }) => ({
+        id,
+        date,
+        status,
+        timestamp,
+        createdById,
+      }),
+    ),
+  };
+}
 
 function normalizeClass(
   classValue: ClassRelation | ClassRelation[] | null | undefined,
@@ -113,12 +184,35 @@ function normalizeClass(
   };
 }
 
+function mapStudentAttendance(
+  items: StudentRow["studentAttendance"] | undefined,
+): StudentAttendanceItem[] {
+  return (items ?? []).map((attendance) => ({
+    id: attendance.id,
+    date: attendance.date,
+    status: attendance.status,
+    timestamp: attendance.timestamp,
+    createdById: attendance.createdById,
+    createdByName: "Unknown",
+  }));
+}
+
 function mapStudentRow(student: StudentRow): StudentRecord {
+  const studentAttendance = mapStudentAttendance(student.studentAttendance);
+
   return {
     ...student,
     class: normalizeClass(student.class),
-    studentAttendance: student.studentAttendance ?? [],
-    attendance: student.studentAttendance ?? [],
+    studentAttendance,
+    attendance: studentAttendance.map(
+      ({ id, date, status, timestamp, createdById }) => ({
+        id,
+        date,
+        status,
+        timestamp,
+        createdById,
+      }),
+    ),
   };
 }
 
@@ -128,7 +222,7 @@ export async function getStudentById(
   const supabase = createClient();
   const { data, error } = await supabase
     .from("User")
-    .select(studentSelect)
+    .select(`${studentSelect}, ${studentAttendanceSelect}`)
     .eq("id", id)
     .eq("role", "student")
     .or("isDeleted.eq.false,isDeleted.is.null")
@@ -140,7 +234,7 @@ export async function getStudentById(
   }
 
   if (!data) return null;
-  return mapStudentRow(data as unknown as StudentRow);
+  return enrichStudentRecordCreators(mapStudentRow(data as unknown as StudentRow));
 }
 
 export async function getStudents(
@@ -164,7 +258,7 @@ export async function getStudents(
   };
 
   let { data, error } = await buildQuery(
-    `${studentSelect}, studentAttendance:AttendanceRecord!studentId(id, date, status, timestamp, createdById)`,
+    `${studentSelect}, ${studentAttendanceSelect}`,
   );
 
   if (error) {
@@ -172,7 +266,7 @@ export async function getStudents(
       "getStudents attendance embed failed, retrying without:",
       error.message,
     );
-    const fallback = await buildQuery(studentSelect);
+    const fallback = await buildQuery(`${studentSelect}, ${studentAttendanceSelect}`);
     data = fallback.data;
     error = fallback.error;
   }
@@ -264,6 +358,7 @@ export async function saveStudent(
         username: input.username,
         password: input.password,
         qrCode: input.qrCode,
+        user_code: input.user_code,
         classId: input.classId,
         isActive: input.isActive,
         isLocked: input.isLocked,
@@ -285,6 +380,7 @@ export async function saveStudent(
     username: input.username,
     password,
     qrCode: input.qrCode,
+    user_code: input.user_code,
     classId: input.classId,
     isActive: input.isActive,
     isLocked: input.isLocked,
@@ -296,7 +392,14 @@ export async function saveStudents(input: {
   classId: string;
   students: Pick<
     StudentRow,
-    "id" | "name" | "email" | "qrCode" | "username" | "isActive" | "isLocked"
+    | "id"
+    | "name"
+    | "email"
+    | "qrCode"
+    | "username"
+    | "user_code"
+    | "isActive"
+    | "isLocked"
   >[];
 }): Promise<StudentRecord[]> {
   return Promise.all(
@@ -308,6 +411,7 @@ export async function saveStudents(input: {
         username: student.username,
         password: "",
         qrCode: student.qrCode,
+        user_code: student.user_code,
         classId: input.classId,
         isActive: student.isActive,
         isLocked: student.isLocked,
@@ -395,4 +499,82 @@ export async function deactivateStudentById(
 export async function lockStudentById(id: string): Promise<StudentRecord> {
   const existing = await getStudentById(id);
   return patchStudentFlags(id, { isLocked: !existing.isLocked });
+}
+
+async function fetchStudentAttendanceByStudentId(
+  studentId: string,
+): Promise<StudentRow["studentAttendance"]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("AttendanceRecord")
+    .select("id, date, status, timestamp, createdById")
+    .eq("studentId", studentId)
+    .order("date", { ascending: false });
+
+  if (error) {
+    console.error("fetchStudentAttendanceByStudentId error:", error);
+    return [];
+  }
+
+  return (data ?? []) as StudentRow["studentAttendance"];
+}
+
+async function findStudentRowByCode(
+  code: string,
+  select: string,
+): Promise<{ row: StudentRow | null; error: Error | null }> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("User")
+    .select(select)
+    .eq("role", "student")
+    .or("isDeleted.eq.false,isDeleted.is.null")
+    .or(`user_code.eq.${code},qrCode.eq.${code},id.eq.${code}`)
+    .maybeSingle();
+
+  return {
+    row: (data as unknown as StudentRow | null) ?? null,
+    error: error as Error | null,
+  };
+}
+
+export async function getStudentAttendanceByCode(
+  code: string,
+): Promise<StudentRecord | null> {
+  const trimmed = code.trim();
+  if (!trimmed) return null;
+
+  let { row, error: queryError } = await findStudentRowByCode(
+    trimmed,
+    `${studentSelect}, ${studentAttendanceSelect}`,
+  );
+
+  if (queryError) {
+    console.warn(
+      "getStudentAttendanceByCode embed failed, loading attendance separately:",
+      queryError.message,
+    );
+
+    const studentOnly = await findStudentRowByCode(trimmed, studentSelect);
+    queryError = studentOnly.error;
+
+    if (studentOnly.row) {
+      row = {
+        ...studentOnly.row,
+        studentAttendance: await fetchStudentAttendanceByStudentId(
+          studentOnly.row.id,
+        ),
+      };
+    } else {
+      row = null;
+    }
+  }
+
+  if (queryError) {
+    console.error("getStudentAttendanceByCode error:", queryError);
+    throw queryError;
+  }
+
+  if (!row) return null;
+  return enrichStudentRecordCreators(mapStudentRow(row));
 }

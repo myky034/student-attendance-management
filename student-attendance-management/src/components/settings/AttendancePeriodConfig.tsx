@@ -31,7 +31,6 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Box, Collapse } from "@mui/material";
 import {
-  Clock1,
   Edit,
   Loader2,
   Plus,
@@ -43,10 +42,11 @@ import {
 import {
   type AttendancePeriodConfig,
   getAttendancePeriodConfigs,
-  getAttendancePeriodConfigById,
+  saveAttendancePeriodConfig,
+  deleteAttendancePeriodConfig,
+  toggleAttendancePeriodConfigStatus,
 } from "@/lib/api/attendanceperiodconfig";
 import {
-  getSemesters,
   getSemesterGreaterThanCurrent,
   type Semester,
 } from "@/lib/api/semester";
@@ -54,7 +54,6 @@ import { getAcademicYears, type AcademicYear } from "@/lib/api/academicyear";
 import { motion } from "motion/react";
 import { Label } from "@radix-ui/react-label";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
 import {
   Select,
   SelectTrigger,
@@ -68,9 +67,30 @@ const MotionBox = motion.create(Box);
 const PERIOD_TYPE = {
   SUNDAY: "Sunday",
   REGULAR: "Regular",
-};
+} as const;
+
+const PERIOD_TYPE_DB = {
+  SUNDAY: "sunday",
+  REGULAR: "regular",
+} as const;
+
+function toDbPeriodType(uiValue: string): string {
+  return uiValue === PERIOD_TYPE.SUNDAY
+    ? PERIOD_TYPE_DB.SUNDAY
+    : PERIOD_TYPE_DB.REGULAR;
+}
+
+function toUiPeriodType(dbValue: string): string {
+  return dbValue === PERIOD_TYPE_DB.SUNDAY
+    ? PERIOD_TYPE.SUNDAY
+    : PERIOD_TYPE.REGULAR;
+}
 
 const currentDate = new Date();
+
+function toDateOnly(value: string): string {
+  return value.split("T")[0];
+}
 
 export function AttendancePeriodConfig() {
   const [attendancePeriodConfigs, setAttendancePeriodConfigs] = useState<
@@ -87,8 +107,8 @@ export function AttendancePeriodConfig() {
     startDate: "",
     endDate: "",
     semesterId: "",
-    type: PERIOD_TYPE.SUNDAY,
-    isActive: false,
+    type: PERIOD_TYPE_DB.SUNDAY,
+    isActive: true,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   });
@@ -97,7 +117,7 @@ export function AttendancePeriodConfig() {
     startDate: "",
     endDate: "",
     semesterId: "",
-    type: PERIOD_TYPE.SUNDAY,
+    type: "",
     isActive: "",
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -129,6 +149,13 @@ export function AttendancePeriodConfig() {
     fetchAttendancePeriodConfigs();
   }, []);
 
+  const handleSelectAttendancePeriodConfig = (uiValue: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      type: toDbPeriodType(uiValue),
+    }));
+  };
+
   const handleOpen = () => {
     setIsOpen(true);
     setIsEditMode(false);
@@ -138,8 +165,8 @@ export function AttendancePeriodConfig() {
       startDate: "",
       endDate: "",
       semesterId: "",
-      type: PERIOD_TYPE.SUNDAY,
-      isActive: false,
+      type: PERIOD_TYPE_DB.SUNDAY,
+      isActive: true,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });
@@ -148,7 +175,7 @@ export function AttendancePeriodConfig() {
       startDate: "",
       endDate: "",
       semesterId: "",
-      type: PERIOD_TYPE.SUNDAY,
+      type: "",
       isActive: "",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -161,22 +188,94 @@ export function AttendancePeriodConfig() {
     setIsEditMode(false);
   };
 
-  //   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-  //     e.preventDefault();
-  //     try {
-  //       await saveAttendancePeriodConfig(formData);
-  //       toast.success("Attendance period config saved successfully");
-  //       handleClose();
-  //       loadAttendancePeriodConfigs();
-  //     } catch (error) {
-  //       console.error("Failed to save attendance period config:", error);
-  //       toast.error("Failed to save attendance period config");
-  //     }
-  //   };
+  const validateForm = () => {
+    const errors: Record<string, string> = {};
+    if (!formData.name) {
+      errors.name = "Name is required";
+    }
+    if (!formData.startDate) {
+      errors.startDate = "Start date is required";
+    }
+    if (!formData.endDate) {
+      errors.endDate = "End date is required";
+    }
+    if (formData.startDate >= formData.endDate) {
+      errors.startDate = "Start date must be before end date";
+    }
+    if (!formData.semesterId) {
+      errors.semesterId = "Semester is required";
+    }
+    if (!formData.type) {
+      errors.type = "Type is required";
+    }
+    return errors;
+  };
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const newErrors = validateForm();
+    setErrors(newErrors);
+    if (!Object.values(newErrors).every((error) => error === "")) {
+      return;
+    }
+    try {
+      await saveAttendancePeriodConfig({
+        ...(isEditMode && formData.id ? { id: formData.id } : {}),
+        name: formData.name.trim(),
+        startDate: formData.startDate,
+        endDate: formData.endDate,
+        semesterId: formData.semesterId,
+        type: formData.type,
+        isActive: formData.isActive,
+      });
+      await loadAttendancePeriodConfigs();
+      toast.success("Attendance period config saved successfully");
+      handleClose();
+    } catch (error) {
+      console.error("Failed to save attendance period config:", error);
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to save attendance period config",
+      );
+    }
+  };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleEdit = (attendancePeriodConfig: AttendancePeriodConfig) => {
+    handleOpen();
+    setIsEditMode(true);
+    setFormData(attendancePeriodConfig);
+  };
+
+  const handleDelete = async (
+    attendancePeriodConfig: AttendancePeriodConfig,
+  ) => {
+    try {
+      await deleteAttendancePeriodConfig(attendancePeriodConfig.id);
+      await loadAttendancePeriodConfigs();
+      toast.success("Attendance period config deleted successfully");
+    } catch (error) {
+      console.error("Failed to delete attendance period config:", error);
+    }
+    toast.error("Failed to delete attendance period config");
+  };
+
+  const handleToggleStatus = async (
+    attendancePeriodConfig: AttendancePeriodConfig,
+  ) => {
+    try {
+      await toggleAttendancePeriodConfigStatus(attendancePeriodConfig);
+      await loadAttendancePeriodConfigs();
+      toast.success("Attendance period config status toggled successfully");
+    } catch (error) {
+      console.error("Failed to toggle attendance period config status:", error);
+      toast.error("Failed to toggle attendance period config status");
+    }
   };
 
   return (
@@ -227,10 +326,7 @@ export function AttendancePeriodConfig() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="px-0 pt-0">
-                    <form
-                      className="space-y-6 w-full"
-                      //onSubmit={handleSubmit}
-                    >
+                    <form className="space-y-6 w-full" onSubmit={handleSubmit}>
                       <div className="space-y-4">
                         <div className="space-y-2">
                           <Label htmlFor="name">Attendance Period Name</Label>
@@ -242,6 +338,11 @@ export function AttendancePeriodConfig() {
                             value={formData.name}
                             onChange={handleChange}
                           />
+                          {errors.name && (
+                            <p className="text-red-500 text-sm">
+                              {errors.name}
+                            </p>
+                          )}
                         </div>
                         <div className="space-y-2">
                           <Label htmlFor="startDate">Start Date</Label>
@@ -252,6 +353,11 @@ export function AttendancePeriodConfig() {
                             value={formData.startDate}
                             onChange={handleChange}
                           />
+                          {errors.startDate && (
+                            <p className="text-red-500 text-sm">
+                              {errors.startDate}
+                            </p>
+                          )}
                         </div>
                         <div className="space-y-2">
                           <Label htmlFor="endDate">End Date</Label>
@@ -262,6 +368,11 @@ export function AttendancePeriodConfig() {
                             value={formData.endDate}
                             onChange={handleChange}
                           />
+                          {errors.endDate && (
+                            <p className="text-red-500 text-sm">
+                              {errors.endDate}
+                            </p>
+                          )}
                         </div>
                         <div className="space-y-2">
                           <Label htmlFor="semesterId">Semester</Label>
@@ -295,14 +406,17 @@ export function AttendancePeriodConfig() {
                               ))}
                             </SelectContent>
                           </Select>
+                          {errors.semesterId && (
+                            <p className="text-red-500 text-sm">
+                              {errors.semesterId}
+                            </p>
+                          )}
                         </div>
                         <div className="space-y-2">
                           <Label htmlFor="type">Type</Label>
                           <Select
-                            value={formData.type}
-                            onValueChange={(value) =>
-                              setFormData((prev) => ({ ...prev, type: value }))
-                            }
+                            value={toUiPeriodType(formData.type)}
+                            onValueChange={handleSelectAttendancePeriodConfig}
                           >
                             <SelectTrigger id="type">
                               <SelectValue placeholder="Select a type" />
@@ -399,25 +513,102 @@ export function AttendancePeriodConfig() {
                             )?.name
                           }
                         </TableCell>
-                        <TableCell>{attendancePeriodConfig.type}</TableCell>
                         <TableCell>
-                          {attendancePeriodConfig.isActive
-                            ? "Active"
-                            : "Inactive"}
+                          {toUiPeriodType(attendancePeriodConfig.type)}
                         </TableCell>
                         <TableCell>
-                          {attendancePeriodConfig.createdAt}
+                          {attendancePeriodConfig.isActive ? (
+                            <Badge variant="success" className="w-fit">
+                              Active
+                            </Badge>
+                          ) : (
+                            <Badge variant="danger" className="w-fit">
+                              Inactive
+                            </Badge>
+                          )}
                         </TableCell>
                         <TableCell>
-                          {attendancePeriodConfig.updatedAt}
+                          {toDateOnly(attendancePeriodConfig.createdAt)}
                         </TableCell>
                         <TableCell>
-                          <Button variant="outline" size="icon">
+                          {toDateOnly(attendancePeriodConfig.updatedAt)}
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleEdit(attendancePeriodConfig)}
+                          >
                             <Edit size={16} />
                           </Button>
-                          <Button variant="outline" size="icon">
-                            <Trash size={16} />
-                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger>
+                              <Button variant="ghost" size="icon">
+                                <Trash size={16} />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>
+                                  Delete Attendance Period Config
+                                </AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Are you sure you want to delete this
+                                  attendance period config?
+                                  <br />
+                                  This action cannot be undone.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() =>
+                                    handleDelete(attendancePeriodConfig)
+                                  }
+                                >
+                                  Delete
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                          <AlertDialog>
+                            <AlertDialogTrigger>
+                              <Button variant="ghost" size="icon">
+                                {attendancePeriodConfig.isActive ? (
+                                  <PowerOff size={16} />
+                                ) : (
+                                  <Power size={16} />
+                                )}
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>
+                                  Toggle Attendance Period Config Status
+                                </AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Are you sure you want to toggle the status of
+                                  this attendance period config?
+                                  <br />
+                                  {attendancePeriodConfig.isActive
+                                    ? "This will deactivate the attendance period config."
+                                    : "This will activate the attendance period config."}
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() =>
+                                    handleToggleStatus(attendancePeriodConfig)
+                                  }
+                                >
+                                  {attendancePeriodConfig.isActive
+                                    ? "Deactivate"
+                                    : "Activate"}
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
                         </TableCell>
                       </TableRow>
                     ),

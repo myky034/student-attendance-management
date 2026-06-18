@@ -44,24 +44,26 @@ model User {
   isLocked          Boolean            @default(false)
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
+  user_code         String?            @unique
   createdAttendance AttendanceRecord[] @relation("CreatedByAttendance")
   studentAttendance AttendanceRecord[] @relation("StudentAttendance")
   class             Class?             @relation(fields: [classId], references: [id], onDelete: Restrict)
 }
 
 model AttendanceRecord {
-  id          String           @id @default(cuid())
-  date        DateTime         @db.Date
-  status      AttendanceStatus
-  timestamp   DateTime         @default(now())
-  studentId   String
-  createdById String
-  semedter_id BigInt?
-  class_id    String?
-  Class       Class?           @relation(fields: [class_id], references: [id], onUpdate: NoAction)
-  createdBy   User             @relation("CreatedByAttendance", fields: [createdById], references: [id])
-  Semester    Semester?        @relation(fields: [semedter_id], references: [id], onUpdate: NoAction)
-  student     User             @relation("StudentAttendance", fields: [studentId], references: [id])
+  id           String           @id @default(cuid())
+  date         DateTime         @db.Date
+  status       AttendanceStatus
+  timestamp    DateTime         @default(now())
+  studentId    String
+  createdById  String
+  semedter_id  BigInt?
+  class_id     String?
+  leave_reason String?
+  Class        Class?           @relation(fields: [class_id], references: [id], onUpdate: NoAction)
+  createdBy    User             @relation("CreatedByAttendance", fields: [createdById], references: [id])
+  Semester     Semester?        @relation(fields: [semedter_id], references: [id], onUpdate: NoAction)
+  student      User             @relation("StudentAttendance", fields: [studentId], references: [id])
 }
 
 model AcademicYear {
