@@ -23,7 +23,10 @@ export function AdminLayout() {
     }
   }, [user, navigate]);
 
-  if (!user || user.role !== "admin") return null;
+  if (!user || (user.role !== "admin" && user.role !== "supervisor")) {
+    navigate("/login");
+    return null;
+  }
 
   const handleLogout = () => {
     logout();

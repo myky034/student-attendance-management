@@ -22,7 +22,7 @@ import {
 } from "@mui/material";
 import { toast } from "sonner";
 import { getStudents, type StudentRecord } from "@/lib/api/students";
-import { saveAttendanceRecord } from "@/lib/api/attendancerecord";
+import { saveAttendanceRecord, resolveSemesterIdForDate } from "@/lib/api/attendancerecord";
 import {
   formatVietnamTime,
   getVietnamDateString,
@@ -182,6 +182,14 @@ export function QRScanner() {
 
     const todayDate = getVietnamDateString();
     const absentTimestamp = getVietnamTimestampString();
+    const semesterId = await resolveSemesterIdForDate(todayDate);
+
+    if (!semesterId) {
+      toast.error("No active semester found for today's date.");
+      setLoading(false);
+      return;
+    }
+
     const scannedById = new Map(
       visibleScannedStudents.map((entry) => [entry.studentId, entry]),
     );
@@ -200,6 +208,8 @@ export function QRScanner() {
           status: scanned ? "present" : "absent",
           timestamp: scanned ? scanned.timestamp : absentTimestamp,
           createdById: user.id,
+          classId: user.classId,
+          semesterId,
         });
 
         if (scanned) {

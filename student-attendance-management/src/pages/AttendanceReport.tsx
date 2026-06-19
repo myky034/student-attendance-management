@@ -1326,6 +1326,7 @@ export function AttendanceReport() {
           studentIds: students.map((student) => student.id),
           dateFrom: attendanceFetchRange.dateFrom,
           dateTo: attendanceFetchRange.dateTo,
+          semesterId: selectedSemesterId || undefined,
         });
         if (cancelled) return;
         setAttendanceByStudent(groupAttendanceByStudent(records));
@@ -1344,7 +1345,7 @@ export function AttendanceReport() {
     return () => {
       cancelled = true;
     };
-  }, [students, attendanceFetchRange]);
+  }, [students, attendanceFetchRange, selectedSemesterId]);
 
   const formatHeaderDate = (dateStr: string) => {
     const [, m, d] = dateStr.split("-");

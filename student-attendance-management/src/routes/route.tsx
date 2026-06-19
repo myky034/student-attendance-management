@@ -13,6 +13,7 @@ import { UserFormDetail } from "@/pages/UserFormDetail";
 import { AttendanceReport } from "@/pages/AttendanceReport";
 import { ParentLayout } from "@/components/ParentLayout";
 import { ParentPortal } from "@/pages/ParentPortal";
+import { LeaveRequests } from "@/pages/LeaveRequests";
 
 export const router = createBrowserRouter([
   {
@@ -62,6 +63,10 @@ export const router = createBrowserRouter([
       {
         path: "qrscanner",
         Component: QRScanner,
+      },
+      {
+        path: "leave-requests",
+        Component: LeaveRequests,
       },
       {
         path: "users/create",

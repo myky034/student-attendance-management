@@ -7,6 +7,7 @@ import {
   Home,
   ScanBarcode,
   FileText,
+  CalendarClock,
 } from "lucide-react";
 import { useAppContext } from "../context/useAppContext";
 
@@ -21,7 +22,10 @@ export function AppLayout() {
     }
   }, [user, navigate]);
 
-  if (!user) return null;
+  if (!user || user.role !== "teacher") {
+    navigate("/login");
+    return null;
+  }
 
   const handleLogout = () => {
     logout();
@@ -34,6 +38,11 @@ export function AppLayout() {
       to: "/qrscanner",
       label: "QR Scanner",
       icon: <ScanBarcode size={20} />,
+    },
+    {
+      to: "/leave-requests",
+      label: "Leave Requests",
+      icon: <CalendarClock size={20} />,
     },
     {
       to: "/attendance-report",

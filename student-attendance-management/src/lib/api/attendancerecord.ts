@@ -1,7 +1,20 @@
 import { createClient } from "@/lib/supabase/client";
 import { getVietnamDateString, toVietnamTimestamp } from "@/lib/datetime";
+import { getSemesterForDate } from "@/lib/api/semester";
 
 export type Status = "present" | "absent" | "excused_absence";
+
+type AttendanceRecordRow = {
+  id: string;
+  studentId: string;
+  date: string;
+  status: Status;
+  timestamp: string;
+  createdById: string;
+  class_id?: string | null;
+  leave_request_id?: number | string | null;
+  semester_id?: number | string | null;
+};
 
 export type CreateAttendanceRecordInput = {
   id: string;
@@ -10,6 +23,9 @@ export type CreateAttendanceRecordInput = {
   status: Status;
   timestamp: string;
   createdById: string;
+  leaveRequestId?: string | null;
+  classId: string;
+  semesterId?: string | null;
 };
 
 export type AttendanceRecord = {
@@ -19,21 +35,84 @@ export type AttendanceRecord = {
   status: Status;
   timestamp: string;
   createdById: string;
+  leaveRequestId?: string | null;
+  classId: string;
+  semesterId?: string | null;
 };
 
 export type GetAttendanceRecordsInput = {
   studentId: string;
   date: string;
+  semesterId?: string | null;
 };
 
 export type GetAttendanceRecordsBulkInput = {
   studentIds: string[];
   dateFrom?: string;
   dateTo?: string;
+  semesterId?: string | null;
 };
 
 function toDateOnly(value: string): string {
   return value.split("T")[0];
+}
+
+function mapAttendanceRecordRow(row: AttendanceRecordRow): AttendanceRecord {
+  return {
+    id: row.id,
+    studentId: row.studentId,
+    date: row.date,
+    status: row.status,
+    timestamp: row.timestamp,
+    createdById: row.createdById,
+    classId: row.class_id ?? "",
+    leaveRequestId:
+      row.leave_request_id != null ? String(row.leave_request_id) : null,
+    semesterId: row.semester_id != null ? String(row.semester_id) : null,
+  };
+}
+
+function buildWritePayload(input: {
+  studentId?: string;
+  date?: string;
+  status: Status;
+  timestamp: string;
+  createdById?: string;
+  classId: string;
+  leaveRequestId?: string | null;
+  semesterId?: string | null;
+}) {
+  const payload: Record<string, unknown> = {
+    status: input.status,
+    timestamp: input.timestamp,
+    class_id: input.classId,
+  };
+
+  if (input.date) {
+    payload.date = input.date;
+  }
+
+  if (input.studentId) {
+    payload.studentId = input.studentId;
+  }
+  if (input.createdById) {
+    payload.createdById = input.createdById;
+  }
+  if (input.leaveRequestId != null && input.leaveRequestId !== "") {
+    payload.leave_request_id = Number(input.leaveRequestId);
+  }
+  if (input.semesterId != null && input.semesterId !== "") {
+    payload.semester_id = Number(input.semesterId);
+  }
+
+  return payload;
+}
+
+export async function resolveSemesterIdForDate(
+  date: string,
+): Promise<string | null> {
+  const semester = await getSemesterForDate(date);
+  return semester?.id ?? null;
 }
 
 export function normalizeAttendanceDate(value: string): string {
@@ -44,17 +123,23 @@ export async function getAttendanceRecords(
   input: GetAttendanceRecordsInput,
 ): Promise<AttendanceRecord[]> {
   const supabase = createClient();
-  const { data, error } = await supabase
+  let query = supabase
     .from("AttendanceRecord")
     .select("*")
     .eq("studentId", input.studentId)
     .eq("date", input.date);
 
+  if (input.semesterId) {
+    query = query.eq("semester_id", Number(input.semesterId));
+  }
+
+  const { data, error } = await query;
+
   if (error) {
     console.error("getAttendanceRecords error:", error);
     throw error;
   }
-  return data as AttendanceRecord[];
+  return ((data ?? []) as AttendanceRecordRow[]).map(mapAttendanceRecordRow);
 }
 
 export async function getAttendanceRecordsByStudentIds(
@@ -76,6 +161,9 @@ export async function getAttendanceRecordsByStudentIds(
   if (input.dateTo) {
     query = query.lte("date", input.dateTo);
   }
+  if (input.semesterId) {
+    query = query.eq("semester_id", Number(input.semesterId));
+  }
 
   const { data, error } = await query.order("date", { ascending: true });
 
@@ -84,7 +172,7 @@ export async function getAttendanceRecordsByStudentIds(
     throw error;
   }
 
-  return (data ?? []) as AttendanceRecord[];
+  return ((data ?? []) as AttendanceRecordRow[]).map(mapAttendanceRecordRow);
 }
 
 export async function createAttendanceRecord(
@@ -93,15 +181,23 @@ export async function createAttendanceRecord(
   const supabase = createClient();
   const date = input.date ? toDateOnly(input.date) : getVietnamDateString();
   const timestamp = toVietnamTimestamp(input.timestamp, date);
+  const semesterId =
+    input.semesterId ?? (await resolveSemesterIdForDate(date));
+
   const { data, error } = await supabase
     .from("AttendanceRecord")
     .insert({
       id: input.id,
-      studentId: input.studentId,
-      date,
-      status: input.status,
-      timestamp,
-      createdById: input.createdById,
+      ...buildWritePayload({
+        studentId: input.studentId,
+        date,
+        status: input.status,
+        timestamp,
+        createdById: input.createdById,
+        classId: input.classId,
+        leaveRequestId: input.leaveRequestId,
+        semesterId,
+      }),
     })
     .select()
     .single();
@@ -109,7 +205,7 @@ export async function createAttendanceRecord(
     console.error("createAttendanceRecord error:", error);
     throw error;
   }
-  return data as AttendanceRecord;
+  return mapAttendanceRecordRow(data as AttendanceRecordRow);
 }
 
 export type UpdateAttendanceRecordInput = {
@@ -117,6 +213,9 @@ export type UpdateAttendanceRecordInput = {
   status: Status;
   timestamp: string;
   createdById?: string;
+  leaveRequestId?: string | null;
+  classId: string;
+  semesterId?: string | null;
 };
 
 export async function updateAttendanceRecord(
@@ -124,20 +223,18 @@ export async function updateAttendanceRecord(
 ): Promise<AttendanceRecord> {
   const supabase = createClient();
   const timestamp = toVietnamTimestamp(input.timestamp);
-  const payload: {
-    status: Status;
-    timestamp: string;
-    createdById?: string;
-  } = {
-    status: input.status,
-    timestamp,
-  };
-  if (input.createdById) {
-    payload.createdById = input.createdById;
-  }
   const { data, error } = await supabase
     .from("AttendanceRecord")
-    .update(payload)
+    .update(
+      buildWritePayload({
+        status: input.status,
+        timestamp,
+        createdById: input.createdById,
+        classId: input.classId,
+        leaveRequestId: input.leaveRequestId,
+        semesterId: input.semesterId,
+      }),
+    )
     .eq("id", input.id)
     .select()
     .single();
@@ -145,7 +242,7 @@ export async function updateAttendanceRecord(
     console.error("updateAttendanceRecord error:", error);
     throw error;
   }
-  return data as AttendanceRecord;
+  return mapAttendanceRecordRow(data as AttendanceRecordRow);
 }
 
 export type SaveAttendanceRecordInput = {
@@ -154,6 +251,9 @@ export type SaveAttendanceRecordInput = {
   status: Status;
   timestamp: string;
   createdById: string;
+  leaveRequestId?: string | null;
+  classId: string;
+  semesterId?: string | null;
 };
 
 /** Tạo mới hoặc cập nhật nếu học sinh đã có bản ghi trong ngày */
@@ -162,10 +262,13 @@ export async function saveAttendanceRecord(
 ): Promise<AttendanceRecord> {
   const date = input.date ? toDateOnly(input.date) : getVietnamDateString();
   const timestamp = toVietnamTimestamp(input.timestamp, date);
+  const semesterId =
+    input.semesterId ?? (await resolveSemesterIdForDate(date));
 
   const existing = await getAttendanceRecords({
     studentId: input.studentId,
     date,
+    semesterId,
   });
 
   if (existing.length > 0) {
@@ -174,6 +277,9 @@ export async function saveAttendanceRecord(
       status: input.status,
       timestamp,
       createdById: input.createdById,
+      leaveRequestId: input.leaveRequestId ?? existing[0].leaveRequestId ?? null,
+      classId: input.classId,
+      semesterId: semesterId ?? existing[0].semesterId ?? null,
     });
   }
 
@@ -184,5 +290,8 @@ export async function saveAttendanceRecord(
     status: input.status,
     timestamp,
     createdById: input.createdById,
+    leaveRequestId: input.leaveRequestId ?? null,
+    classId: input.classId,
+    semesterId,
   });
 }

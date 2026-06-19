@@ -276,14 +276,14 @@ function StudentList({
                   variant={
                     todayAttendance.status === "present"
                       ? "success"
-                      : todayAttendance.status === "excused absence"
+                      : todayAttendance.status === "excused_absence"
                         ? "warning"
                         : "danger"
                   }
                 >
                   {todayAttendance.status === "present"
                     ? "Present"
-                    : todayAttendance.status === "excused absence"
+                    : todayAttendance.status === "excused_absence"
                       ? "Excused Absence"
                       : "Absent"}
                 </Badge>
@@ -507,14 +507,14 @@ function StudentList({
                                   variant={
                                     record.status === "present"
                                       ? "success"
-                                      : record.status === "excused absence"
+                                      : record.status === "excused_absence"
                                         ? "warning"
                                         : "danger"
                                   }
                                 >
                                   {record.status === "present"
                                     ? "Present"
-                                    : record.status === "excused absence"
+                                    : record.status === "excused_absence"
                                       ? "Excused Absence"
                                       : "Absent"}
                                 </Badge>

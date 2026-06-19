@@ -6,9 +6,11 @@ import { motion } from "motion/react";
 import { Zap, AlertCircle, LogIn, Eye, EyeOff } from "lucide-react";
 import { authenticateUser } from "@/lib/api/user";
 import { useAppContext } from "../context/useAppContext";
-import type { User } from "../context/appContext";
+import type { User, UserRole } from "../context/appContext";
 
-function mapDbUserToSessionUser(dbUser: Awaited<ReturnType<typeof authenticateUser>>): User {
+function mapDbUserToSessionUser(
+  dbUser: Awaited<ReturnType<typeof authenticateUser>>,
+): User {
   if (!dbUser) {
     throw new Error("User not found");
   }
@@ -19,7 +21,7 @@ function mapDbUserToSessionUser(dbUser: Awaited<ReturnType<typeof authenticateUs
     email: dbUser.email,
     username: dbUser.username,
     password: dbUser.password,
-    role: dbUser.role,
+    role: dbUser.role as UserRole,
     qrCode: dbUser.qrCode,
     classId: dbUser.classId,
     isActive: dbUser.isActive,
@@ -65,7 +67,7 @@ export function Login() {
 
       setSessionUser(mapDbUserToSessionUser(userData));
 
-      if (userData.role === "admin") {
+      if (userData.role === "admin" || userData.role === "supervisor") {
         navigate("/admin/dashboard");
       } else {
         navigate("/dashboard");
@@ -169,7 +171,8 @@ export function Login() {
           </form>
 
           <div className="mt-6 text-center text-sm text-zinc-500 dark:text-zinc-400">
-            Use the email and password stored in the <strong>User</strong> table.
+            Use the email and password stored in the <strong>User</strong>{" "}
+            table.
           </div>
         </div>
       </motion.div>

@@ -95,18 +95,45 @@ export async function getSemesters(): Promise<Semester[]> {
   return ((data ?? []) as SemesterRow[]).map(mapSemesterRow);
 }
 
+function toDateOnly(value: string): string {
+  return value.split("T")[0];
+}
+
+export function findSemesterForDate(
+  semesters: Semester[],
+  date: string,
+): Semester | null {
+  const target = toDateOnly(date);
+  const matches = semesters
+    .filter((semester) => {
+      if (!semester.isActive) return false;
+      if (!semester.startDate || !semester.endDate) return false;
+      const start = toDateOnly(semester.startDate);
+      const end = toDateOnly(semester.endDate);
+      return target >= start && target <= end;
+    })
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+
+  return matches[0] ?? null;
+}
+
 export async function getSemesterById(id: string): Promise<Semester | null> {
   const supabase = createClient();
   const { data, error } = await supabase
     .from("Semester")
     .select(semesterSelect)
     .eq("id", Number(id))
-    .single();
+    .maybeSingle();
   if (error) {
     console.error("getSemesterById error:", error);
     throw error;
   }
   return data ? mapSemesterRow(data as SemesterRow) : null;
+}
+
+export async function getSemesterForDate(date: string): Promise<Semester | null> {
+  const semesters = await getSemesters();
+  return findSemesterForDate(semesters, date);
 }
 
 export async function getSemesterGreaterThanCurrent(

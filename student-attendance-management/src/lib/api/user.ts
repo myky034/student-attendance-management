@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 
-export type UserRole = "admin" | "student" | "teacher";
+export type UserRole = "admin" | "student" | "teacher" | "supervisor";
 
 type GradeRow = {
   id: string;

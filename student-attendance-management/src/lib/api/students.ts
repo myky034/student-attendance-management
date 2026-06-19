@@ -234,7 +234,9 @@ export async function getStudentById(
   }
 
   if (!data) return null;
-  return enrichStudentRecordCreators(mapStudentRow(data as unknown as StudentRow));
+  return enrichStudentRecordCreators(
+    mapStudentRow(data as unknown as StudentRow),
+  );
 }
 
 export async function getStudents(
@@ -266,7 +268,9 @@ export async function getStudents(
       "getStudents attendance embed failed, retrying without:",
       error.message,
     );
-    const fallback = await buildQuery(`${studentSelect}, ${studentAttendanceSelect}`);
+    const fallback = await buildQuery(
+      `${studentSelect}, ${studentAttendanceSelect}`,
+    );
     data = fallback.data;
     error = fallback.error;
   }
