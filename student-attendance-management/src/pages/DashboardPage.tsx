@@ -110,10 +110,14 @@ function StudentList({
   student,
   attendanceRate,
   onDeleted,
+  onLocked,
+  onActivated,
 }: {
   student: StudentRecord;
   attendanceRate: number;
   onDeleted: () => void;
+  onLocked: () => void;
+  onActivated: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
@@ -174,6 +178,7 @@ function StudentList({
     setIsDeactivating(true);
     try {
       await deactivateStudentById(id);
+      onActivated();
       toast.success(
         student.isActive
           ? "Student deactivated successfully"
@@ -183,6 +188,7 @@ function StudentList({
       console.error("Failed to toggle student active status:", error);
       toast.error("Failed to update student status");
     } finally {
+      setAnchorEl(null);
       setIsDeactivating(false);
       setLoading(false);
     }
@@ -196,15 +202,17 @@ function StudentList({
     setIsLocking(true);
     try {
       await lockStudentById(id);
+      onLocked();
       toast.success(
         student.isLocked
-          ? "Student locked successfully"
-          : "Student unlocked successfully",
+          ? "Student unlocked successfully"
+          : "Student locked successfully",
       );
     } catch (error) {
       console.error("Failed to toggle student lock status:", error);
       toast.error("Failed to update student lock status");
     } finally {
+      setAnchorEl(null);
       setIsLocking(false);
       setLoading(false);
     }
@@ -263,7 +271,7 @@ function StudentList({
             <TableCell>{student.email}</TableCell>
             <TableCell>
               {student.isLocked ? (
-                <Badge variant="warning">Locked</Badge>
+                <Badge variant="destructive">Locked</Badge>
               ) : (
                 <Badge variant={student.isActive ? "success" : "danger"}>
                   {student.isActive ? "Active" : "Inactive"}
@@ -459,9 +467,8 @@ function StudentList({
                         <AlertDialogAction
                           onClick={() => handleLock(student.id)}
                           className={cn(
-                            "bg-red-600 hover:bg-red-700",
-                            !student.isLocked &&
-                              "bg-green-600 hover:bg-green-700",
+                            "bg-green-600 hover:bg-green-700",
+                            !student.isLocked && "bg-red-600 hover:bg-red-700",
                           )}
                           disabled={isLocking}
                         >
@@ -648,6 +655,24 @@ export function DashboardPage() {
     })();
   }, [user]);
 
+  const handleStudentLocked = useCallback(() => {
+    if (!user) return;
+    void (async () => {
+      const result = await fetchStudentsForUser(user);
+      setStudents(result.students);
+      setFetchError(result.error);
+    })();
+  }, [user]);
+
+  const handleStudentActivated = useCallback(() => {
+    if (!user) return;
+    void (async () => {
+      const result = await fetchStudentsForUser(user);
+      setStudents(result.students);
+      setFetchError(result.error);
+    })();
+  }, [user]);
+
   const filteredStudents = useMemo(() => {
     if (!searchTerm.trim()) return students;
 
@@ -823,6 +848,8 @@ export function DashboardPage() {
                         attendanceRateByStudentId[student.id] ?? 0
                       }
                       onDeleted={handleStudentDeleted}
+                      onLocked={handleStudentLocked}
+                      onActivated={handleStudentActivated}
                     />
                   ))
                 )}

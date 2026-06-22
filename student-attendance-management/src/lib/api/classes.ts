@@ -72,3 +72,21 @@ export async function getClassById(id: string): Promise<ClassOption | null> {
   if (!data) return null;
   return mapClassRow(data as unknown as ClassRow);
 }
+
+export async function getClassesByGradeId(
+  gradeId: string,
+): Promise<ClassOption[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("Class")
+    .select(classSelect)
+    .eq("gradeId", gradeId)
+    .order("name");
+
+  if (error) {
+    console.error("getClassesByGradeId error:", error);
+    throw error;
+  }
+
+  return ((data ?? []) as ClassRow[]).map(mapClassRow);
+}

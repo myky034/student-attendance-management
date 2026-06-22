@@ -10,8 +10,8 @@ datasource db {
 model Grade {
   id          String   @id @default(cuid())
   name        String
-  description String
-  color       String
+  description String?
+  color       String?
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -36,21 +36,21 @@ model User {
   name                                           String
   email                                          String             @unique
   username                                       String             @unique
-  password                                       String
+  password                                       String?
   role                                           UserRole
-  qrCode                                         String?
+  qrCode                                         String             @unique
   classId                                        String?
   isActive                                       Boolean            @default(true)
   isDeleted                                      Boolean            @default(false)
   isLocked                                       Boolean            @default(false)
   createdAt                                      DateTime           @default(now())
   updatedAt                                      DateTime           @updatedAt
-  user_code                                      String?            @unique
+  holy_name                                      String?            @db.VarChar
   createdAttendance                              AttendanceRecord[] @relation("CreatedByAttendance")
   studentAttendance                              AttendanceRecord[] @relation("StudentAttendance")
   LeaveRequest_LeaveRequest_rejected_by_idToUser LeaveRequest[]     @relation("LeaveRequest_rejected_by_idToUser")
-  LeaveRequest_LeaveRequest_approved_by_idToUser LeaveRequest[]     @relation("LeaveRequest_approved_by_idToUser")
   LeaveRequest_LeaveRequest_student_idToUser     LeaveRequest[]     @relation("LeaveRequest_student_idToUser")
+  LeaveRequest_LeaveRequest_approved_by_idToUser LeaveRequest[]     @relation("LeaveRequest_approved_by_idToUser")
   class                                          Class?             @relation(fields: [classId], references: [id], onDelete: Restrict)
 }
 
@@ -61,26 +61,26 @@ model AttendanceRecord {
   timestamp        DateTime         @default(now())
   studentId        String
   createdById      String
-  semester_id      BigInt?
-  class_id         String?
+  semester_id      BigInt
+  class_id         String
   leave_request_id BigInt?
   created_at       DateTime         @default(now()) @db.Timestamptz(6)
   updated_at       DateTime         @default(now()) @db.Timestamptz(6)
-  Class            Class?           @relation(fields: [class_id], references: [id], onUpdate: NoAction)
+  Class            Class            @relation(fields: [class_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
   createdBy        User             @relation("CreatedByAttendance", fields: [createdById], references: [id])
   Leave_Request    LeaveRequest?    @relation(fields: [leave_request_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  Semester         Semester?        @relation(fields: [semester_id], references: [id], onUpdate: NoAction)
+  Semester         Semester         @relation(fields: [semester_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
   student          User             @relation("StudentAttendance", fields: [studentId], references: [id])
 }
 
 model AcademicYear {
   id         BigInt     @id @default(autoincrement())
-  name       String?    @db.VarChar
-  start_date DateTime?  @db.Date
-  end_date   DateTime?  @db.Date
-  is_active  Boolean?
+  name       String     @db.VarChar
+  start_date DateTime   @db.Date
+  end_date   DateTime   @db.Date
+  is_active  Boolean
   created_at DateTime   @default(now()) @db.Timestamptz(6)
-  update_at  DateTime?  @default(now()) @db.Timestamptz(6)
+  update_at  DateTime   @default(now()) @db.Timestamptz(6)
   Semester   Semester[]
 }
 
@@ -88,30 +88,30 @@ model Semester {
   id                     BigInt                   @id @default(autoincrement())
   name                   String                   @db.VarChar
   code                   String?                  @db.VarChar
-  start_date             DateTime?                @db.Date
-  end_date               DateTime?                @db.Date
+  start_date             DateTime                 @db.Date
+  end_date               DateTime                 @db.Date
   sort_order             Decimal?                 @db.Decimal
-  is_active              Boolean?
+  is_active              Boolean
   created_at             DateTime                 @default(now()) @db.Timestamptz(6)
-  update_at              DateTime?                @default(now()) @db.Timestamptz(6)
-  academic_year_id       BigInt?
+  update_at              DateTime                 @default(now()) @db.Timestamptz(6)
+  academic_year_id       BigInt
   AttendancePeriodConfig AttendancePeriodConfig[]
   AttendanceRecord       AttendanceRecord[]
-  AcademicYear           AcademicYear?            @relation(fields: [academic_year_id], references: [id], onUpdate: NoAction)
+  AcademicYear           AcademicYear             @relation(fields: [academic_year_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model AttendancePeriodConfig {
-  id          BigInt                @id @default(autoincrement())
-  semester_id BigInt?
-  name        String                @db.VarChar
-  type        AttendancePeriodType?
-  start_date  DateTime?             @db.Date
-  end_date    DateTime?             @db.Date
-  is_active   Boolean?
-  created_at  DateTime              @default(now()) @db.Timestamptz(6)
-  updated_at  DateTime              @default(now()) @db.Timestamptz(6)
-  Semester    Semester?             @relation(fields: [semester_id], references: [id], onUpdate: NoAction)
+  id          BigInt               @id @default(autoincrement())
+  semester_id BigInt
+  name        String               @db.VarChar
+  type        AttendancePeriodType
+  start_date  DateTime             @db.Date
+  end_date    DateTime             @db.Date
+  is_active   Boolean
+  created_at  DateTime             @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime             @default(now()) @db.Timestamptz(6)
+  Semester    Semester             @relation(fields: [semester_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
@@ -129,13 +129,13 @@ model LeaveRequest {
   rejected_reason                        String?
   rejected_at                            DateTime?          @db.Timestamptz(6)
   created_at                             DateTime           @default(now()) @db.Timestamptz(6)
-  updated_at                             DateTime?          @default(now()) @db.Timestamptz(6)
+  updated_at                             DateTime           @default(now()) @db.Timestamptz(6)
   rejected_by_id                         String?
   AttendanceRecord                       AttendanceRecord[]
   User_LeaveRequest_rejected_by_idToUser User?              @relation("LeaveRequest_rejected_by_idToUser", fields: [rejected_by_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  User_LeaveRequest_student_idToUser     User               @relation("LeaveRequest_student_idToUser", fields: [student_id], references: [id], onDelete: SetNull, onUpdate: NoAction, map: "Leave_Request_student_id_fkey")
   User_LeaveRequest_approved_by_idToUser User?              @relation("LeaveRequest_approved_by_idToUser", fields: [approved_by_id], references: [id], onUpdate: NoAction, map: "Leave_Request_approved_by_id_fkey")
   Class                                  Class              @relation(fields: [class_id], references: [id], onDelete: SetNull, onUpdate: NoAction, map: "Leave_Request_class_id_fkey")
-  User_LeaveRequest_student_idToUser     User               @relation("LeaveRequest_student_idToUser", fields: [student_id], references: [user_code], onDelete: SetNull, onUpdate: NoAction, map: "Leave_Request_student_id_fkey")
 }
 
 enum UserRole {

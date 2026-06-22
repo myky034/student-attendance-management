@@ -35,9 +35,18 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   type StudentRecord,
   getStudentAttendanceByCode,
 } from "@/lib/api/students";
+import { getGrades, type GradeOption } from "@/lib/api/grades";
+import { getClassesByGradeId, type ClassOption } from "@/lib/api/classes";
 import { cn } from "@/lib/utils";
 import {
   Table,
@@ -140,6 +149,10 @@ export function ParentPortal() {
   const [openLeaveDetail, setOpenLeaveDetail] = useState(false);
   const [selectedLeaveRequest, setSelectedLeaveRequest] =
     useState<LeaveRequest | null>(null);
+  const [grades, setGrades] = useState<GradeOption[]>([]);
+  const [selectedGrade, setSelectedGrade] = useState<GradeOption | null>(null);
+  const [classes, setClasses] = useState<ClassOption[]>([]);
+  const [selectedClass, setSelectedClass] = useState<ClassOption | null>(null);
 
   const loadLeaveRequests = async (studentCode: string) => {
     setLoading(true);
@@ -155,11 +168,50 @@ export function ParentPortal() {
 
   useEffect(() => {
     void (async () => {
-      if (student?.user_code) {
-        await loadLeaveRequests(student.user_code);
+      try {
+        const data = await getGrades();
+        setGrades(data);
+      } catch (error) {
+        console.error("Failed to load grades:", error);
+        toast.error("Unable to load grades.");
       }
     })();
-  }, [student?.user_code]);
+  }, []);
+
+  useEffect(() => {
+    if (!selectedGrade?.id) return;
+
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const data = await getClassesByGradeId(selectedGrade.id);
+        if (!cancelled) {
+          setClasses(data);
+          setSelectedClass(null);
+        }
+      } catch (error) {
+        console.error("Failed to load classes:", error);
+        if (!cancelled) {
+          toast.error("Unable to load classes.");
+          setClasses([]);
+          setSelectedClass(null);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedGrade?.id]);
+
+  useEffect(() => {
+    void (async () => {
+      if (student?.id) {
+        await loadLeaveRequests(student.id);
+      }
+    })();
+  }, [student?.id]);
 
   const handleSubmit = async () => {
     setError({
@@ -168,16 +220,24 @@ export function ParentPortal() {
     });
     setLoading(true);
     try {
-      const result = await getStudentAttendanceByCode(studentQuery.trim());
+      const result = await getStudentAttendanceByCode(studentQuery.trim(), {
+        classId: selectedClass?.id,
+      });
       if (result) {
         setStudent(result);
         setIsSubmitted(true);
-        //console.log(result.studentAttendance);
       } else {
-        toast.error("Student not found");
+        if (student?.isDeleted) {
+          toast.error("Student is not available");
+        } else if (student?.isLocked) {
+          toast.error("Student is not available");
+        } else if (student?.isActive) {
+          toast.error("Student is not available");
+        }
+        toast.error("Student is not available");
       }
     } catch {
-      toast.error("Unable to load student information.");
+      toast.error("Student is not available.");
     } finally {
       setLoading(false);
     }
@@ -200,6 +260,8 @@ export function ParentPortal() {
       leaveReason: "",
     });
     setStudentQuery("");
+    setSelectedGrade(null);
+    setSelectedClass(null);
   };
 
   const validateLeaveRequest = () => {
@@ -236,15 +298,15 @@ export function ParentPortal() {
       if (!student) {
         throw new Error("Student not found");
       }
-      if (!student.user_code) {
-        throw new Error("Student code is missing");
+      if (!student.id) {
+        throw new Error("Student id is missing");
       }
       if (!student.class?.id) {
         throw new Error("Student class is missing");
       }
 
       const result = await saveLeaveRequest({
-        student_id: student.user_code,
+        student_id: student.id,
         class_id: student.class.id,
         request_date: formData.leaveDate ?? "",
         reason: formData.leaveReason ?? "",
@@ -373,9 +435,87 @@ export function ParentPortal() {
                       onSubmit={(event) => event.preventDefault()}
                     >
                       <div className="space-y-2">
-                        <Label htmlFor="studentQuery">
-                          Student ID or QR Code
-                        </Label>
+                        <Label htmlFor="grade-select">Grade</Label>
+                        <Select
+                          value={selectedGrade?.id}
+                          onValueChange={(value) => {
+                            const grade =
+                              grades.find((item) => item.id === value) ?? null;
+                            setSelectedGrade(grade);
+                            setSelectedClass(null);
+                            if (!grade) {
+                              setClasses([]);
+                            }
+                          }}
+                        >
+                          <SelectTrigger
+                            id="grade-select"
+                            className="h-12 rounded-xl"
+                          >
+                            <SelectValue placeholder="Select grade" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {grades.length > 0 ? (
+                              grades.map((grade) => (
+                                <SelectItem key={grade.id} value={grade.id}>
+                                  {grade.name}
+                                </SelectItem>
+                              ))
+                            ) : (
+                              <SelectItem value="__empty" disabled>
+                                No grades available
+                              </SelectItem>
+                            )}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="class-select">Class</Label>
+                        <Select
+                          value={selectedClass?.id}
+                          onValueChange={(value) => {
+                            const classOption =
+                              classes.find((item) => item.id === value) ?? null;
+                            setSelectedClass(classOption);
+                          }}
+                          disabled={!selectedGrade}
+                        >
+                          <SelectTrigger
+                            id="class-select"
+                            className="h-12 rounded-xl"
+                          >
+                            <SelectValue
+                              placeholder={
+                                selectedGrade
+                                  ? "Select class"
+                                  : "Select a grade first"
+                              }
+                            />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {classes.length > 0 ? (
+                              classes.map((classOption) => (
+                                <SelectItem
+                                  key={classOption.id}
+                                  value={classOption.id}
+                                >
+                                  {classOption.name}
+                                </SelectItem>
+                              ))
+                            ) : (
+                              <SelectItem value="__empty" disabled>
+                                {selectedGrade
+                                  ? "No classes available"
+                                  : "Select a grade first"}
+                              </SelectItem>
+                            )}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="studentQuery">Student Name</Label>
                         <div className="relative">
                           <Search
                             size={16}
@@ -384,12 +524,13 @@ export function ParentPortal() {
                           <Input
                             id="studentQuery"
                             className="h-12 rounded-xl border-zinc-200 bg-zinc-50 pl-9 text-base focus-visible:ring-indigo-500 dark:border-zinc-700 dark:bg-zinc-800/50"
-                            placeholder="Enter student ID or QR code"
+                            placeholder="Enter student name"
                             type="text"
                             value={studentQuery}
                             onChange={(event) =>
                               setStudentQuery(event.target.value)
                             }
+                            disabled={!selectedGrade || !selectedClass}
                           />
                         </div>
                       </div>

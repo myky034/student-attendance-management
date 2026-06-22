@@ -6,7 +6,6 @@ type CreateStudentInput = {
   username: string;
   password: string;
   qrCode: string;
-  user_code: string;
   classId: string;
   isActive: boolean;
   isLocked: boolean;
@@ -19,7 +18,6 @@ type UpdateStudentInput = {
   username: string;
   password?: string;
   qrCode: string;
-  user_code: string;
   classId: string;
   isActive: boolean;
   isLocked: boolean;
@@ -67,7 +65,6 @@ type StudentRow = {
   username: string;
   role: string;
   qrCode: string;
-  user_code: string;
   isActive: boolean;
   isDeleted: boolean;
   isLocked: boolean;
@@ -103,13 +100,12 @@ export type SaveStudentInput = {
   username: string;
   password?: string;
   qrCode: string;
-  user_code: string;
   classId: string;
   isActive: boolean;
   isLocked: boolean;
 };
 
-const studentSelect = `id, name, email, username, role, qrCode, user_code, isActive, isDeleted, isLocked, classId, createdAt, updatedAt,
+const studentSelect = `id, name, email, username, role, qrCode, isActive, isDeleted, isLocked, classId, createdAt, updatedAt,
   class:Class(id, name, grade:Grade(id, name, description, color, isActive))`;
 
 const studentAttendanceSelect =
@@ -362,7 +358,6 @@ export async function saveStudent(
         username: input.username,
         password: input.password,
         qrCode: input.qrCode,
-        user_code: input.user_code,
         classId: input.classId,
         isActive: input.isActive,
         isLocked: input.isLocked,
@@ -384,7 +379,6 @@ export async function saveStudent(
     username: input.username,
     password,
     qrCode: input.qrCode,
-    user_code: input.user_code,
     classId: input.classId,
     isActive: input.isActive,
     isLocked: input.isLocked,
@@ -396,14 +390,7 @@ export async function saveStudents(input: {
   classId: string;
   students: Pick<
     StudentRow,
-    | "id"
-    | "name"
-    | "email"
-    | "qrCode"
-    | "username"
-    | "user_code"
-    | "isActive"
-    | "isLocked"
+    "id" | "name" | "email" | "qrCode" | "username" | "isActive" | "isLocked"
   >[];
 }): Promise<StudentRecord[]> {
   return Promise.all(
@@ -415,7 +402,6 @@ export async function saveStudents(input: {
         username: student.username,
         password: "",
         qrCode: student.qrCode,
-        user_code: student.user_code,
         classId: input.classId,
         isActive: student.isActive,
         isLocked: student.isLocked,
@@ -513,6 +499,9 @@ async function fetchStudentAttendanceByStudentId(
     .from("AttendanceRecord")
     .select("id, date, status, timestamp, createdById")
     .eq("studentId", studentId)
+    .eq("isActive", true)
+    .eq("isDeleted", false)
+    .eq("isLocked", false)
     .order("date", { ascending: false });
 
   if (error) {
@@ -523,34 +512,92 @@ async function fetchStudentAttendanceByStudentId(
   return (data ?? []) as StudentRow["studentAttendance"];
 }
 
-async function findStudentRowByCode(
-  code: string,
-  select: string,
-): Promise<{ row: StudentRow | null; error: Error | null }> {
-  const supabase = createClient();
-  const { data, error } = await supabase
-    .from("User")
-    .select(select)
-    .eq("role", "student")
-    .or("isDeleted.eq.false,isDeleted.is.null")
-    .or(`user_code.eq.${code},qrCode.eq.${code},id.eq.${code}`)
-    .maybeSingle();
-
-  return {
-    row: (data as unknown as StudentRow | null) ?? null,
-    error: error as Error | null,
-  };
+function escapeIlikePattern(value: string): string {
+  return value.replace(/[%_\\]/g, (char) => `\\${char}`);
 }
 
+type StudentLookupResult = {
+  row: StudentRow | null;
+  error: Error | null;
+};
+
+async function findStudentByLookup(
+  lookup: string,
+  select: string,
+  options?: { classId?: string },
+): Promise<StudentLookupResult> {
+  const supabase = createClient();
+  const trimmed = lookup.trim();
+  if (!trimmed) return { row: null, error: null };
+
+  const buildBaseQuery = () => {
+    let query = supabase
+      .from("User")
+      .select(select)
+      .eq("role", "student")
+      .or(
+        "isDeleted.eq.false,isDeleted.is.null,isActive.eq.true,isActive.is.null,isLocked.eq.false,isLocked.is.null",
+      );
+
+    if (options?.classId) {
+      query = query.eq("classId", options.classId);
+    }
+
+    return query;
+  };
+
+  const { data: qrMatch, error: qrError } = await buildBaseQuery()
+    .eq("qrCode", trimmed)
+    .maybeSingle();
+
+  if (qrError) {
+    return { row: null, error: qrError as Error };
+  }
+  if (qrMatch) {
+    return { row: qrMatch as unknown as StudentRow, error: null };
+  }
+
+  const { data: exactNameMatch, error: exactNameError } = await buildBaseQuery()
+    .ilike("name", trimmed)
+    .maybeSingle();
+
+  if (exactNameError) {
+    return { row: null, error: exactNameError as Error };
+  }
+  if (exactNameMatch) {
+    return { row: exactNameMatch as unknown as StudentRow, error: null };
+  }
+
+  const { data: partialMatches, error: partialNameError } =
+    await buildBaseQuery()
+      .ilike("name", `%${escapeIlikePattern(trimmed)}%`)
+      .order("name", { ascending: true })
+      .limit(1);
+
+  if (partialNameError) {
+    return { row: null, error: partialNameError as Error };
+  }
+
+  const row =
+    (partialMatches?.[0] as unknown as StudentRow | undefined) ?? null;
+  return { row, error: null };
+}
+
+export type GetStudentAttendanceByCodeOptions = {
+  classId?: string;
+};
+
 export async function getStudentAttendanceByCode(
-  code: string,
+  lookup: string,
+  options?: GetStudentAttendanceByCodeOptions,
 ): Promise<StudentRecord | null> {
-  const trimmed = code.trim();
+  const trimmed = lookup.trim();
   if (!trimmed) return null;
 
-  let { row, error: queryError } = await findStudentRowByCode(
+  let { row, error: queryError } = await findStudentByLookup(
     trimmed,
     `${studentSelect}, ${studentAttendanceSelect}`,
+    options,
   );
 
   if (queryError) {
@@ -559,7 +606,11 @@ export async function getStudentAttendanceByCode(
       queryError.message,
     );
 
-    const studentOnly = await findStudentRowByCode(trimmed, studentSelect);
+    const studentOnly = await findStudentByLookup(
+      trimmed,
+      studentSelect,
+      options,
+    );
     queryError = studentOnly.error;
 
     if (studentOnly.row) {

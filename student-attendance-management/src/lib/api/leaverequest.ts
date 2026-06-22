@@ -8,7 +8,7 @@ type ClassRelation = {
 type UserRelation = {
   id: string;
   name: string;
-  user_code: string | null;
+  qrCode: string;
   class?: ClassRelation | ClassRelation[] | null;
 };
 
@@ -37,6 +37,7 @@ type LeaveRequestRow = {
 export type LeaveRequestStudent = {
   id: string;
   name: string;
+  /** Student QR code (display identifier) */
   code: string;
   class: ClassRelation | null;
 };
@@ -84,7 +85,7 @@ const leaveRequestBaseSelect = `
 const leaveRequestSelectWithRelations = `
   ${leaveRequestBaseSelect},
   Class(id, name),
-  User_LeaveRequest_student_idToUser:User(id, name, user_code, class:Class(id, name)),
+  User_LeaveRequest_student_idToUser:User(id, name, qrCode, class:Class(id, name)),
   User_LeaveRequest_approved_by_idToUser:User(id, name),
   User_LeaveRequest_rejected_by_idToUser:User(id, name)
 `;
@@ -100,29 +101,25 @@ function normalizeClassRelation(
   return normalizeRelation(value);
 }
 
-async function fetchUsersByCodes(
-  codes: string[],
+async function fetchStudentsByIds(
+  studentIds: string[],
 ): Promise<Map<string, UserRelation>> {
-  if (codes.length === 0) return new Map();
+  if (studentIds.length === 0) return new Map();
 
   const supabase = createClient();
   const { data, error } = await supabase
     .from("User")
-    .select("id, name, user_code, class:Class(id, name)")
-    .in("user_code", codes);
+    .select("id, name, qrCode, class:Class(id, name)")
+    .in("id", studentIds);
 
   if (error) {
-    console.warn("fetchUsersByCodes failed:", error.message);
+    console.warn("fetchStudentsByIds failed:", error.message);
     return new Map();
   }
 
-  const usersByCode = new Map<string, UserRelation>();
-  for (const user of (data ?? []) as UserRelation[]) {
-    if (user.user_code) {
-      usersByCode.set(user.user_code, user);
-    }
-  }
-  return usersByCode;
+  return new Map(
+    ((data ?? []) as UserRelation[]).map((user) => [user.id, user]),
+  );
 }
 
 async function fetchUsersByIds(
@@ -175,13 +172,13 @@ async function fetchClassesByIds(
 
 function buildLeaveRequestStudent(
   row: LeaveRequestRow,
-  userByCode: Map<string, UserRelation>,
+  userById: Map<string, UserRelation>,
   classById: Map<string, ClassRelation>,
 ): LeaveRequestStudent {
   const embeddedUser = normalizeRelation(
     row.User_LeaveRequest_student_idToUser,
   );
-  const user = embeddedUser ?? userByCode.get(row.student_id);
+  const user = embeddedUser ?? userById.get(row.student_id);
   const classFromRequest = normalizeClassRelation(row.Class);
   const classFromUser = normalizeClassRelation(user?.class);
   const classFromId = classById.get(row.class_id) ?? null;
@@ -189,7 +186,7 @@ function buildLeaveRequestStudent(
   return {
     id: user?.id ?? row.student_id,
     name: user?.name ?? "Unknown",
-    code: user?.user_code ?? row.student_id,
+    code: user?.qrCode ?? row.student_id,
     class: classFromRequest ?? classFromId ?? classFromUser,
   };
 }
@@ -199,7 +196,7 @@ async function mapLeaveRequestRows(
 ): Promise<LeaveRequest[]> {
   if (rows.length === 0) return [];
 
-  const studentCodes = [...new Set(rows.map((row) => row.student_id))];
+  const studentIds = [...new Set(rows.map((row) => row.student_id))];
   const classIds = [
     ...new Set(rows.map((row) => row.class_id).filter(Boolean)),
   ];
@@ -218,16 +215,16 @@ async function mapLeaveRequestRows(
     ),
   ];
 
-  const [userByCode, classById, approverNameById, rejectedNameById] =
+  const [userById, classById, approverNameById, rejectedNameById] =
     await Promise.all([
-      fetchUsersByCodes(studentCodes),
+      fetchStudentsByIds(studentIds),
       fetchClassesByIds(classIds),
       fetchUsersByIds(approverIds),
       fetchUsersByIds(rejectedIds),
     ]);
 
   return rows.map((row) => {
-    const student = buildLeaveRequestStudent(row, userByCode, classById);
+    const student = buildLeaveRequestStudent(row, userById, classById);
 
     return {
       id: String(row.id),
@@ -377,6 +374,7 @@ export async function getLeaveRequestsByStudentId(
       .from("LeaveRequest")
       .select(select)
       .eq("student_id", studentId)
+      .order("request_date", { ascending: false })
       .order("created_at", { ascending: false });
     return { data: data as unknown as LeaveRequestRow[] | null, error };
   });
@@ -391,7 +389,8 @@ export async function getLeaveRequestsByClassId(
       .from("LeaveRequest")
       .select(select)
       .eq("class_id", classId)
-      .order("request_date", { ascending: false });
+      .order("request_date", { ascending: false })
+      .order("created_at", { ascending: false });
     return { data: data as unknown as LeaveRequestRow[] | null, error };
   });
 }
