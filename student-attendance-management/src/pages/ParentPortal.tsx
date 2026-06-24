@@ -1,12 +1,11 @@
-import { useEffect, useState } from "react";
-import { AnimatePresence, motion } from "motion/react";
+import { useEffect, useRef, useState } from "react";
+import { motion } from "motion/react";
 import {
-  ScanLine,
+  Scan,
   Search,
   ShieldCheck,
   User,
   Users,
-  X,
   History,
   Calendar1,
   ArrowLeft,
@@ -20,6 +19,7 @@ import {
   FileText,
   UserCheck,
   MessageSquareX,
+  X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -71,6 +71,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { BrowserQRCodeReader } from "@zxing/browser";
 
 function getLeaveStatusVariant(status?: string) {
   const normalized = status?.toLowerCase();
@@ -123,7 +124,6 @@ function DetailRow({
 }
 
 export function ParentPortal() {
-  const [isScanning, setIsScanning] = useState(false);
   const [studentQuery, setStudentQuery] = useState("");
   const [student, setStudent] = useState<StudentRecord | null>(null);
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
@@ -153,6 +153,14 @@ export function ParentPortal() {
   const [selectedGrade, setSelectedGrade] = useState<GradeOption | null>(null);
   const [classes, setClasses] = useState<ClassOption[]>([]);
   const [selectedClass, setSelectedClass] = useState<ClassOption | null>(null);
+  const [isScanning, setIsScanning] = useState(false);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [videoElement, setVideoElement] = useState<HTMLVideoElement | null>(
+    null,
+  );
+  const scannedSetRef = useRef(new Set<string>());
+  const scannerControlsRef = useRef<{ stop: () => void } | null>(null);
+  const [errorScan, setErrorScan] = useState("");
 
   const loadLeaveRequests = async (studentCode: string) => {
     setLoading(true);
@@ -212,6 +220,90 @@ export function ParentPortal() {
       }
     })();
   }, [student?.id]);
+
+  const handleCloseScanner = () => {
+    scannerControlsRef.current?.stop();
+    scannerControlsRef.current = null;
+    setIsScanning(false);
+    setErrorScan("");
+    setVideoElement(null);
+  };
+
+  const handleOpenScanner = () => {
+    scannedSetRef.current.clear();
+    setErrorScan("");
+    setVideoElement(null);
+    setIsScanning(true);
+  };
+
+  useEffect(() => {
+    if (!isScanning || !videoElement) return;
+
+    let cancelled = false;
+    const codeReader = new BrowserQRCodeReader();
+
+    void (async () => {
+      try {
+        const controls = await codeReader.decodeFromConstraints(
+          {
+            video: {
+              facingMode: { ideal: "environment" },
+            },
+          },
+          videoElement,
+          (result) => {
+            if (cancelled || !result) return;
+
+            const qrText = result.getText();
+            if (scannedSetRef.current.has(qrText)) return;
+
+            scannedSetRef.current.add(qrText);
+            cancelled = true;
+            scannerControlsRef.current?.stop();
+            scannerControlsRef.current = null;
+            setIsScanning(false);
+            setErrorScan("");
+            setVideoElement(null);
+
+            setLoading(true);
+            void (async () => {
+              try {
+                const studentResult = await getStudentAttendanceByCode(
+                  qrText.trim(),
+                );
+                if (studentResult) {
+                  setStudent(studentResult);
+                  setIsSubmitted(true);
+                } else {
+                  toast.error("Student not found");
+                }
+              } catch {
+                toast.error("Unable to load student information.");
+              } finally {
+                setLoading(false);
+              }
+            })();
+          },
+        );
+        if (cancelled) {
+          controls.stop();
+          return;
+        }
+        scannerControlsRef.current = controls;
+      } catch (err) {
+        console.error(err);
+        if (!cancelled) {
+          setErrorScan("Unable to open camera.");
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      scannerControlsRef.current?.stop();
+      scannerControlsRef.current = null;
+    };
+  }, [isScanning, videoElement]);
 
   const handleSubmit = async () => {
     setError({
@@ -389,181 +481,187 @@ export function ParentPortal() {
                   Parent Portal
                 </CardTitle>
                 <CardDescription className="max-w-sm text-base text-zinc-500 dark:text-zinc-400">
-                  Look up your child&apos;s attendance using their student ID or
-                  QR code.
+                  Look up your child&apos;s attendance using their student name.
                 </CardDescription>
               </CardHeader>
 
               <CardContent className="px-6 pb-8">
-                <AnimatePresence mode="wait">
-                  {isScanning ? (
-                    <motion.div
-                      key="scanner"
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: "auto" }}
-                      exit={{ opacity: 0, height: 0 }}
-                      transition={{ duration: 0.25 }}
-                      className="overflow-hidden"
-                    >
-                      <div className="relative overflow-hidden rounded-2xl border border-zinc-200 bg-black dark:border-zinc-700">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => setIsScanning(false)}
-                          className="absolute top-2 right-2 z-10 h-9 w-9 rounded-full bg-black/50 text-white hover:bg-black/70 hover:text-white"
-                          aria-label="Close scanner"
-                        >
-                          <X size={18} />
-                        </Button>
-                        <div
-                          id="parent-qr-reader"
-                          className="min-h-[280px] w-full"
+                {isScanning ? (
+                  <motion.div
+                    key="scanner"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <div className="relative overflow-hidden rounded-2xl border border-zinc-200 bg-black dark:border-zinc-700">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={handleCloseScanner}
+                        className="absolute top-2 right-2 z-10 h-9 w-9 rounded-full bg-black/50 text-white hover:bg-black/70 hover:text-white"
+                        aria-label="Close scanner"
+                      >
+                        <X size={18} />
+                      </Button>
+
+                      <div>
+                        {errorScan && (
+                          <p className="mb-2 text-center text-sm text-red-500">
+                            {errorScan}
+                          </p>
+                        )}
+
+                        <video
+                          ref={(node) => {
+                            videoRef.current = node;
+                            setVideoElement(node);
+                          }}
+                          className="min-h-[280px] w-full rounded-2xl bg-black object-cover"
+                          muted
+                          playsInline
                         />
                       </div>
-                      <p className="mt-3 text-center text-sm text-zinc-500 dark:text-zinc-400">
-                        Point the camera at the student QR code to continue.
-                      </p>
-                    </motion.div>
-                  ) : (
-                    <motion.form
-                      key="lookup"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      className="space-y-5"
-                      onSubmit={(event) => event.preventDefault()}
-                    >
-                      <div className="space-y-2">
-                        <Label htmlFor="grade-select">Grade</Label>
-                        <Select
-                          value={selectedGrade?.id}
-                          onValueChange={(value) => {
-                            const grade =
-                              grades.find((item) => item.id === value) ?? null;
-                            setSelectedGrade(grade);
-                            setSelectedClass(null);
-                            if (!grade) {
-                              setClasses([]);
-                            }
-                          }}
+                    </div>
+                    <p className="mt-3 text-center text-sm text-zinc-500 dark:text-zinc-400">
+                      Point the camera at the student QR code to continue.
+                    </p>
+                  </motion.div>
+                ) : (
+                  <motion.form
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="space-y-5"
+                    onSubmit={(event) => event.preventDefault()}
+                  >
+                    <div className="space-y-2">
+                      <Label htmlFor="grade-select">Grade</Label>
+                      <Select
+                        value={selectedGrade?.id}
+                        onValueChange={(value) => {
+                          const grade =
+                            grades.find((item) => item.id === value) ?? null;
+                          setSelectedGrade(grade);
+                          setSelectedClass(null);
+                          if (!grade) {
+                            setClasses([]);
+                          }
+                        }}
+                      >
+                        <SelectTrigger
+                          id="grade-select"
+                          className="h-12 rounded-xl"
                         >
-                          <SelectTrigger
-                            id="grade-select"
-                            className="h-12 rounded-xl"
-                          >
-                            <SelectValue placeholder="Select grade" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {grades.length > 0 ? (
-                              grades.map((grade) => (
-                                <SelectItem key={grade.id} value={grade.id}>
-                                  {grade.name}
-                                </SelectItem>
-                              ))
-                            ) : (
-                              <SelectItem value="__empty" disabled>
-                                No grades available
+                          <SelectValue placeholder="Select grade" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {grades.length > 0 ? (
+                            grades.map((grade) => (
+                              <SelectItem key={grade.id} value={grade.id}>
+                                {grade.name}
                               </SelectItem>
-                            )}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="class-select">Class</Label>
-                        <Select
-                          value={selectedClass?.id}
-                          onValueChange={(value) => {
-                            const classOption =
-                              classes.find((item) => item.id === value) ?? null;
-                            setSelectedClass(classOption);
-                          }}
-                          disabled={!selectedGrade}
-                        >
-                          <SelectTrigger
-                            id="class-select"
-                            className="h-12 rounded-xl"
-                          >
-                            <SelectValue
-                              placeholder={
-                                selectedGrade
-                                  ? "Select class"
-                                  : "Select a grade first"
-                              }
-                            />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {classes.length > 0 ? (
-                              classes.map((classOption) => (
-                                <SelectItem
-                                  key={classOption.id}
-                                  value={classOption.id}
-                                >
-                                  {classOption.name}
-                                </SelectItem>
-                              ))
-                            ) : (
-                              <SelectItem value="__empty" disabled>
-                                {selectedGrade
-                                  ? "No classes available"
-                                  : "Select a grade first"}
-                              </SelectItem>
-                            )}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="studentQuery">Student Name</Label>
-                        <div className="relative">
-                          <Search
-                            size={16}
-                            className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400"
-                          />
-                          <Input
-                            id="studentQuery"
-                            className="h-12 rounded-xl border-zinc-200 bg-zinc-50 pl-9 text-base focus-visible:ring-indigo-500 dark:border-zinc-700 dark:bg-zinc-800/50"
-                            placeholder="Enter student name"
-                            type="text"
-                            value={studentQuery}
-                            onChange={(event) =>
-                              setStudentQuery(event.target.value)
-                            }
-                            disabled={!selectedGrade || !selectedClass}
-                          />
-                        </div>
-                      </div>
-
-                      <div className="flex flex-col gap-3 sm:flex-row">
-                        <Button
-                          type="submit"
-                          size="lg"
-                          className="h-12 flex-1 rounded-xl bg-indigo-600 text-base font-semibold shadow-lg shadow-indigo-600/20 hover:bg-indigo-700"
-                          disabled={!studentQuery.trim() || loading}
-                          onClick={handleSubmit}
-                        >
-                          {loading ? (
-                            <Loader2 size={18} className="animate-spin" />
+                            ))
                           ) : (
-                            <Search size={18} />
+                            <SelectItem value="__empty" disabled>
+                              No grades available
+                            </SelectItem>
                           )}
-                          Find Student
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="lg"
-                          onClick={() => setIsScanning(true)}
-                          className="h-12 flex-1 rounded-xl border-zinc-200 text-base dark:border-zinc-700"
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="class-select">Class</Label>
+                      <Select
+                        value={selectedClass?.id}
+                        onValueChange={(value) => {
+                          const classOption =
+                            classes.find((item) => item.id === value) ?? null;
+                          setSelectedClass(classOption);
+                        }}
+                        disabled={!selectedGrade}
+                      >
+                        <SelectTrigger
+                          id="class-select"
+                          className="h-12 rounded-xl"
                         >
-                          <ScanLine size={18} />
-                          Scan QR
-                        </Button>
+                          <SelectValue
+                            placeholder={
+                              selectedGrade
+                                ? "Select class"
+                                : "Select a grade first"
+                            }
+                          />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {classes.length > 0 ? (
+                            classes.map((classOption) => (
+                              <SelectItem
+                                key={classOption.id}
+                                value={classOption.id}
+                              >
+                                {classOption.name}
+                              </SelectItem>
+                            ))
+                          ) : (
+                            <SelectItem value="__empty" disabled>
+                              {selectedGrade
+                                ? "No classes available"
+                                : "Select a grade first"}
+                            </SelectItem>
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="studentQuery">Student Name</Label>
+                      <div className="relative">
+                        <Search
+                          size={16}
+                          className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400"
+                        />
+                        <Input
+                          id="studentQuery"
+                          className="h-12 rounded-xl border-zinc-200 bg-zinc-50 pl-9 text-base focus-visible:ring-indigo-500 dark:border-zinc-700 dark:bg-zinc-800/50"
+                          placeholder="Enter student name"
+                          type="text"
+                          value={studentQuery}
+                          onChange={(event) =>
+                            setStudentQuery(event.target.value)
+                          }
+                          disabled={!selectedGrade || !selectedClass}
+                        />
                       </div>
-                    </motion.form>
-                  )}
-                </AnimatePresence>
+                    </div>
+
+                    <Button
+                      type="submit"
+                      size="lg"
+                      className="h-12 w-full rounded-xl bg-indigo-600 text-base font-semibold shadow-lg shadow-indigo-600/20 hover:bg-indigo-700"
+                      disabled={!studentQuery.trim() || loading}
+                      onClick={handleSubmit}
+                    >
+                      {loading ? (
+                        <Loader2 size={18} className="animate-spin" />
+                      ) : (
+                        <Search size={18} />
+                      )}
+                      Find Student
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="lg"
+                      className="h-12 w-full rounded-xl border-zinc-200 text-base dark:border-zinc-700"
+                      onClick={handleOpenScanner}
+                    >
+                      <Scan size={18} />
+                      Scan QR Code
+                    </Button>
+                  </motion.form>
+                )}
               </CardContent>
             </Card>
           </motion.div>

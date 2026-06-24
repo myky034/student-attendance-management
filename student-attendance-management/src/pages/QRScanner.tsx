@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { QrCode, Trash2 } from "lucide-react";
+import { Plus, QrCode, X } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import {
   Box,
@@ -8,9 +8,6 @@ import {
   TableRow,
   Typography,
   CardContent,
-  Button,
-  Alert,
-  TextField,
   Chip,
   TableContainer,
   Table,
@@ -19,16 +16,24 @@ import {
   TableCell,
   Paper,
   Avatar,
+  Alert,
 } from "@mui/material";
 import { toast } from "sonner";
 import { getStudents, type StudentRecord } from "@/lib/api/students";
-import { saveAttendanceRecord, resolveSemesterIdForDate } from "@/lib/api/attendancerecord";
+import {
+  saveAttendanceRecord,
+  resolveSemesterIdForDate,
+} from "@/lib/api/attendancerecord";
 import {
   formatVietnamTime,
   getVietnamDateString,
   getVietnamTimestampString,
 } from "@/lib/datetime";
 import { useAppContext } from "../context/useAppContext";
+import { BrowserQRCodeReader } from "@zxing/browser";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/lable";
 
 const MotionBox = motion.create(Box);
 const MotionCard = motion.create(Card);
@@ -54,6 +59,29 @@ export function QRScanner() {
     { studentId: string; timestamp: string }[]
   >([]);
   const { user } = useAppContext();
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [videoElement, setVideoElement] = useState<HTMLVideoElement | null>(
+    null,
+  );
+  const scannedSetRef = useRef(new Set<string>());
+  const scannerControlsRef = useRef<{ stop: () => void } | null>(null);
+  const [errorScan, setErrorScan] = useState("");
+  const [isScanning, setIsScanning] = useState(false);
+
+  const handleCloseScanner = () => {
+    scannerControlsRef.current?.stop();
+    scannerControlsRef.current = null;
+    setIsScanning(false);
+    setErrorScan("");
+    setVideoElement(null);
+  };
+
+  const handleOpenScanner = () => {
+    scannedSetRef.current.clear();
+    setErrorScan("");
+    setVideoElement(null);
+    setIsScanning(true);
+  };
 
   const loadStudents = useCallback(async () => {
     if (!user) return;
@@ -92,6 +120,51 @@ export function QRScanner() {
       cancelled = true;
     };
   }, [user, loadStudents]);
+
+  useEffect(() => {
+    if (!isScanning || !videoElement) return;
+    let cancelled = false;
+    const codeReader = new BrowserQRCodeReader();
+    void (async () => {
+      try {
+        const controls = await codeReader.decodeFromConstraints(
+          {
+            video: {
+              facingMode: { ideal: "environment" },
+            },
+          },
+          videoElement,
+          (result) => {
+            if (cancelled || !result) return;
+            const qrText = result.getText();
+            if (scannedSetRef.current.has(qrText)) return;
+            scannedSetRef.current.add(qrText);
+            toast.success(qrText);
+            scannerControlsRef.current?.stop();
+            scannerControlsRef.current = null;
+            setIsScanning(false);
+            setErrorScan("");
+            setVideoElement(null);
+          },
+        );
+        if (cancelled) {
+          controls.stop();
+          return;
+        }
+        scannerControlsRef.current = controls;
+      } catch (err) {
+        console.error(err);
+        if (!cancelled) {
+          setErrorScan("Unable to open camera.");
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+      scannerControlsRef.current?.stop();
+      scannerControlsRef.current = null;
+    };
+  }, [isScanning, videoElement]);
 
   const today = getVietnamDateString();
 
@@ -295,8 +368,8 @@ export function QRScanner() {
                   whileTap={{ scale: 0.95 }}
                 >
                   <Button
-                    variant="contained"
-                    size="medium"
+                    variant="default"
+                    size="lg"
                     onClick={handleCompleteAttendance}
                     className="py-2.5 px-6 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-lg font-medium hover:bg-zinc-800 dark:hover:bg-zinc-200 inline-flex items-center gap-2"
                   >
@@ -335,32 +408,45 @@ export function QRScanner() {
               Scan QR Code
             </Typography>
 
-            <Box
-              sx={{
-                border: "2px dashed #ccc",
-                borderRadius: 2,
-                p: 4,
-                textAlign: "center",
-                bgcolor: "#f9fafb",
-                mb: 2,
-              }}
-            >
-              <QrCode
-                size={48}
-                style={{ margin: "0 auto", color: "#667eea" }}
-              />
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-                QR Scanner would appear here in a production app
-              </Typography>
+            {showDemoQR || (
+              <Box
+                sx={{
+                  border: "2px dashed #ccc",
+                  borderRadius: 2,
+                  p: 4,
+                  textAlign: "center",
+                  bgcolor: "#f9fafb",
+                  mb: 2,
+                }}
+              >
+                <video
+                  ref={(node) => {
+                    videoRef.current = node;
+                    setVideoElement(node);
+                  }}
+                  className="min-h-[280px] w-full rounded-2xl bg-black object-cover"
+                  muted
+                  playsInline
+                />
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{ mt: 2 }}
+                >
+                  Point the camera at the student QR code to continue.
+                </Typography>
+              </Box>
+            )}
+            <div className="flex justify-center">
               <Button
-                variant="outlined"
-                size="small"
+                variant="default"
+                size="lg"
                 onClick={() => setShowDemoQR(!showDemoQR)}
-                sx={{ mt: 2 }}
+                className="mt-2"
               >
                 {showDemoQR ? "Hide Demo QR" : "Show Demo QR Codes"}
               </Button>
-            </Box>
+            </div>
 
             <AnimatePresence>
               {showDemoQR && (
@@ -371,15 +457,13 @@ export function QRScanner() {
                   transition={{ duration: 0.3 }}
                 >
                   <Box sx={{ mb: 2 }}>
-                    <Alert severity="info" sx={{ mb: 2, borderRadius: 2 }}>
-                      Demo: Click on any QR code to simulate scanning
+                    <Alert severity="info" className="mb-2 rounded-2xl mt-2">
+                      <Label className="text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">
+                        Click on any QR code to simulate scanning
+                      </Label>
+                      {alreadyMarkedCount} student(s) đã điểm danh hôm nay và
+                      không hiển thị trong danh sách quét.
                     </Alert>
-                    {alreadyMarkedCount > 0 && (
-                      <Alert severity="warning" sx={{ mb: 2, borderRadius: 2 }}>
-                        {alreadyMarkedCount} student(s) đã điểm danh hôm nay và
-                        không hiển thị trong danh sách quét.
-                      </Alert>
-                    )}
                     <Box
                       sx={{
                         display: "grid",
@@ -470,24 +554,24 @@ export function QRScanner() {
               Manual Entry
             </Typography>
             <form onSubmit={handleManualEntry}>
-              <TextField
-                fullWidth
-                size="small"
-                placeholder="Enter Student ID"
-                value={manualId}
-                onChange={(e) => setManualId(e.target.value)}
-                InputProps={{
-                  endAdornment: (
-                    <Button
-                      type="submit"
-                      size="small"
-                      disabled={!manualId.trim()}
-                    >
-                      Add
-                    </Button>
-                  ),
-                }}
-              />
+              <div className="flex gap-2">
+                <Input
+                  id="manualId"
+                  placeholder="Enter Student ID"
+                  type="text"
+                  value={manualId}
+                  onChange={(e) => setManualId(e.target.value)}
+                  className="h-12 rounded-xl border-zinc-200 bg-zinc-50 text-base focus-visible:ring-indigo-500 dark:border-zinc-700 dark:bg-zinc-800/50"
+                />
+                <Button
+                  type="submit"
+                  className="h-12 rounded-xl bg-indigo-600 text-base font-semibold shadow-indigo-600/20 hover:bg-indigo-700"
+                  disabled={!manualId.trim()}
+                >
+                  <Plus size={18} />
+                  Add
+                </Button>
+              </div>
             </form>
           </CardContent>
         </MotionCard>
@@ -541,16 +625,9 @@ export function QRScanner() {
                     exit={{ opacity: 0, scale: 0.8 }}
                   >
                     <Button
-                      size="small"
-                      startIcon={<Trash2 size={16} />}
+                      size="lg"
+                      variant="destructive"
                       onClick={handleClearAll}
-                      color="error"
-                      sx={{
-                        transition: "all 0.2s ease",
-                        "&:hover": {
-                          transform: "scale(1.05)",
-                        },
-                      }}
                     >
                       Clear All
                     </Button>
@@ -692,14 +769,11 @@ export function QRScanner() {
                                     whileTap={{ scale: 0.9 }}
                                   >
                                     <Button
-                                      size="small"
-                                      color="error"
+                                      size="lg"
+                                      variant="destructive"
                                       onClick={() =>
                                         handleRemoveStudent(entry.studentId)
                                       }
-                                      sx={{
-                                        transition: "all 0.2s ease",
-                                      }}
                                     >
                                       Remove
                                     </Button>

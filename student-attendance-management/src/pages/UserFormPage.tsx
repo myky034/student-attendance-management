@@ -14,16 +14,7 @@ import {
 } from "../lib/api/students";
 import { useAppContext } from "../context/useAppContext";
 import { Switch } from "../components/ui/switch";
-
-/**
- * Generate a random QR code
- * @returns {string} The generated QR code
- */
-const generateQRCode = () => {
-  const timestamp = Date.now();
-  const randomString = Math.random().toString(36).substring(2, 15);
-  return `GXTD-${timestamp}-${randomString}`.toUpperCase();
-};
+import { generateQRCode } from "../lib/importStudents";
 
 export const UserFormPage = () => {
   const navigate = useNavigate();
