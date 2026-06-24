@@ -19,6 +19,7 @@ import {
   Calendar,
   Edit,
   ImageDown,
+  Cross,
 } from "lucide-react";
 import { Button } from "../components/ui/button";
 import {
@@ -222,10 +223,7 @@ export function UserFormDetail() {
 
   const attendanceStats = useMemo(
     () =>
-      calculateYearlyAttendanceTotals(
-        yearAttendanceRecords,
-        yearSchoolSundays,
-      ),
+      calculateYearlyAttendanceTotals(yearAttendanceRecords, yearSchoolSundays),
     [yearAttendanceRecords, yearSchoolSundays],
   );
 
@@ -329,6 +327,22 @@ export function UserFormDetail() {
                     Download QR Code
                   </Button>
                 </Paper>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-zinc-100 dark:bg-zinc-800 rounded-full flex items-center justify-center">
+                  <Cross
+                    size={24}
+                    className="text-zinc-500 dark:text-zinc-400"
+                  />
+                </div>
+                <div>
+                  <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                    Holy Name
+                  </p>
+                  <p className="font-semibold">
+                    {student?.holy_name ? student.holy_name : "N/A"}
+                  </p>
+                </div>
               </div>
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 bg-zinc-100 dark:bg-zinc-800 rounded-full flex items-center justify-center">

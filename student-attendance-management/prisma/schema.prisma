@@ -66,6 +66,7 @@ model AttendanceRecord {
   leave_request_id BigInt?
   created_at       DateTime         @default(now()) @db.Timestamptz(6)
   updated_at       DateTime         @default(now()) @db.Timestamptz(6)
+  is_late          Boolean?
   Class            Class            @relation(fields: [class_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
   createdBy        User             @relation("CreatedByAttendance", fields: [createdById], references: [id])
   Leave_Request    LeaveRequest?    @relation(fields: [leave_request_id], references: [id], onDelete: NoAction, onUpdate: NoAction)

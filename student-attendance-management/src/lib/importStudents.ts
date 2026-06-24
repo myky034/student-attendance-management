@@ -2,6 +2,7 @@ const EMAIL_DOMAIN = "school.edu";
 
 export type RawImportRow = {
   name: string;
+  holy_name: string;
   email: string;
   username: string;
   role: string;
@@ -23,7 +24,10 @@ const HEADER_MAP: Record<string, keyof RawImportRow> = {
 };
 
 function normalizeHeaderKey(key: string): string {
-  return key.replace(/^\ufeff/, "").trim().toLowerCase();
+  return key
+    .replace(/^\ufeff/, "")
+    .trim()
+    .toLowerCase();
 }
 
 export function parseRawImportRows(
@@ -32,6 +36,7 @@ export function parseRawImportRows(
   return raw.map((row) => {
     const normalized: RawImportRow = {
       name: "",
+      holy_name: "",
       email: "",
       username: "",
       role: "student",
@@ -63,6 +68,7 @@ export function validateImportNames(rows: RawImportRow[]): {
     validRows.push({
       ...row,
       name: row.name.trim(),
+      holy_name: row.holy_name.trim(),
       email: row.email.trim().toLowerCase(),
       username: row.username.trim(),
       role: (row.role.trim().toLowerCase() || "student") as string,
@@ -144,7 +150,9 @@ export function buildImportPreviewRows(
   existingEmails: string[] = [],
   existingUsernames: string[] = [],
 ): ImportPreviewRow[] {
-  const usedEmails = new Set(existingEmails.map((email) => email.toLowerCase()));
+  const usedEmails = new Set(
+    existingEmails.map((email) => email.toLowerCase()),
+  );
   const usedUsernames = new Set(
     existingUsernames.map((username) => username.toLowerCase()),
   );
@@ -166,6 +174,7 @@ export function buildImportPreviewRows(
 
     return {
       name: row.name,
+      holy_name: row.holy_name,
       email,
       username,
       role: row.role || "student",

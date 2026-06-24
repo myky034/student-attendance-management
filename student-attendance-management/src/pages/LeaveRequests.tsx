@@ -25,9 +25,11 @@ import {
   approveLeaveRequest,
 } from "@/lib/api/leaverequest";
 import {
-  createAttendanceRecord,
+  saveAttendanceRecord,
   resolveSemesterIdForDate,
+  normalizeAttendanceDate,
 } from "@/lib/api/attendancerecord";
+import { getVietnamTimestampString } from "@/lib/datetime";
 import { toast } from "sonner";
 import { useAppContext } from "@/context/useAppContext";
 import {
@@ -62,6 +64,7 @@ function getLeaveStatusVariant(status?: string) {
   const normalized = status?.toLowerCase();
   if (normalized === "pending") return "warning";
   if (normalized === "approved") return "success";
+  if (normalized === "cancelled") return "outline";
   return "danger";
 }
 
@@ -106,6 +109,21 @@ function DetailRow({
       </div>
     </div>
   );
+}
+
+function formatApiError(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof error.message === "string"
+  ) {
+    return error.message;
+  }
+  return fallback;
 }
 
 export function LeaveRequests() {
@@ -236,14 +254,24 @@ export function LeaveRequests() {
     setLoading(true);
     try {
       const classId = leaveRequest.class_id || user.classId;
-      const semesterId = await resolveSemesterIdForDate(
-        leaveRequest.request_date,
-      );
+      const attendanceDate = normalizeAttendanceDate(leaveRequest.request_date);
+      const semesterId = await resolveSemesterIdForDate(attendanceDate);
 
       if (!semesterId) {
         toast.error("No active semester found for the leave request date.");
         return;
       }
+
+      await saveAttendanceRecord({
+        studentId: leaveRequest.student_id,
+        date: attendanceDate,
+        status: "excused_absence",
+        timestamp: getVietnamTimestampString(),
+        createdById: user.id,
+        leaveRequestId: leaveRequest.id,
+        classId,
+        semesterId,
+      });
 
       await approveLeaveRequest({
         id: leaveRequest.id,
@@ -252,21 +280,11 @@ export function LeaveRequests() {
         status: "approved",
       });
 
-      await createAttendanceRecord({
-        id: crypto.randomUUID(),
-        studentId: leaveRequest.student.id,
-        date: leaveRequest.request_date,
-        status: "excused_absence",
-        timestamp: new Date().toISOString(),
-        createdById: user.id,
-        leaveRequestId: leaveRequest.id,
-        classId,
-        semesterId,
-      });
       toast.success("Leave request approved successfully");
       await loadLeaveRequests();
     } catch (error) {
-      toast.error(error as string);
+      console.error("handleApproveLeaveRequest error:", error);
+      toast.error(formatApiError(error, "Failed to approve leave request."));
     } finally {
       setLoading(false);
     }

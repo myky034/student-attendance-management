@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Plus, QrCode, X } from "lucide-react";
+import { Plus, QrCode } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import {
   Box,
@@ -19,18 +19,24 @@ import {
   Alert,
 } from "@mui/material";
 import { toast } from "sonner";
-import { getStudents, type StudentRecord } from "@/lib/api/students";
+import {
+  getStudentsForAttendance,
+  getStudentAttendanceByCode,
+  type StudentRecord,
+} from "@/lib/api/students";
 import {
   saveAttendanceRecord,
   resolveSemesterIdForDate,
+  updateAttendanceRecord,
 } from "@/lib/api/attendancerecord";
+import { cancelLeaveRequest } from "@/lib/api/leaverequest";
 import {
   formatVietnamTime,
   getVietnamDateString,
   getVietnamTimestampString,
 } from "@/lib/datetime";
 import { useAppContext } from "../context/useAppContext";
-import { BrowserQRCodeReader } from "@zxing/browser";
+import { useQrCameraScanner } from "@/hooks/useQrCameraScanner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/lable";
@@ -43,9 +49,22 @@ function normalizeAttendanceDate(date: string): string {
   return date.split("T")[0];
 }
 
-function hasAttendanceToday(student: StudentRecord, today: string): boolean {
-  return student.studentAttendance.some(
+function getTodayAttendanceRecord(
+  student: StudentRecord,
+  today: string,
+): StudentRecord["studentAttendance"][number] | undefined {
+  return student.studentAttendance.find(
     (record) => normalizeAttendanceDate(record.date) === today,
+  );
+}
+
+function isPendingForScan(student: StudentRecord, today: string): boolean {
+  const todayRecord = getTodayAttendanceRecord(student, today);
+  if (!todayRecord) return true;
+  if (todayRecord.status === "present") return false;
+  if (todayRecord.isLate) return false;
+  return (
+    todayRecord.status === "absent" || todayRecord.status === "excused_absence"
   );
 }
 
@@ -54,34 +73,11 @@ export function QRScanner() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showDemoQR, setShowDemoQR] = useState(false);
-  const [manualId, setManualId] = useState("");
+  const [manualName, setManualName] = useState("");
   const [scannedStudents, setScannedStudents] = useState<
     { studentId: string; timestamp: string }[]
   >([]);
   const { user } = useAppContext();
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const [videoElement, setVideoElement] = useState<HTMLVideoElement | null>(
-    null,
-  );
-  const scannedSetRef = useRef(new Set<string>());
-  const scannerControlsRef = useRef<{ stop: () => void } | null>(null);
-  const [errorScan, setErrorScan] = useState("");
-  const [isScanning, setIsScanning] = useState(false);
-
-  const handleCloseScanner = () => {
-    scannerControlsRef.current?.stop();
-    scannerControlsRef.current = null;
-    setIsScanning(false);
-    setErrorScan("");
-    setVideoElement(null);
-  };
-
-  const handleOpenScanner = () => {
-    scannedSetRef.current.clear();
-    setErrorScan("");
-    setVideoElement(null);
-    setIsScanning(true);
-  };
 
   const loadStudents = useCallback(async () => {
     if (!user) return;
@@ -96,7 +92,7 @@ export function QRScanner() {
         setError("Teacher not assigned to a class. Please update in Settings.");
         return;
       }
-      const data = await getStudents({ classId });
+      const data = await getStudentsForAttendance({ classId });
       setStudents(data);
     } catch (error) {
       console.error("Failed to fetch students:", error);
@@ -121,55 +117,10 @@ export function QRScanner() {
     };
   }, [user, loadStudents]);
 
-  useEffect(() => {
-    if (!isScanning || !videoElement) return;
-    let cancelled = false;
-    const codeReader = new BrowserQRCodeReader();
-    void (async () => {
-      try {
-        const controls = await codeReader.decodeFromConstraints(
-          {
-            video: {
-              facingMode: { ideal: "environment" },
-            },
-          },
-          videoElement,
-          (result) => {
-            if (cancelled || !result) return;
-            const qrText = result.getText();
-            if (scannedSetRef.current.has(qrText)) return;
-            scannedSetRef.current.add(qrText);
-            toast.success(qrText);
-            scannerControlsRef.current?.stop();
-            scannerControlsRef.current = null;
-            setIsScanning(false);
-            setErrorScan("");
-            setVideoElement(null);
-          },
-        );
-        if (cancelled) {
-          controls.stop();
-          return;
-        }
-        scannerControlsRef.current = controls;
-      } catch (err) {
-        console.error(err);
-        if (!cancelled) {
-          setErrorScan("Unable to open camera.");
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-      scannerControlsRef.current?.stop();
-      scannerControlsRef.current = null;
-    };
-  }, [isScanning, videoElement]);
-
   const today = getVietnamDateString();
 
   const studentsPendingToday = useMemo(
-    () => students.filter((student) => !hasAttendanceToday(student, today)),
+    () => students.filter((student) => isPendingForScan(student, today)),
     [students, today],
   );
 
@@ -189,54 +140,118 @@ export function QRScanner() {
 
   const alreadyMarkedCount = students.length - studentsPendingToday.length;
 
-  const handleScan = (studentId: string) => {
-    const foundStudent = studentsPendingToday.find((s) => s.id === studentId);
-    if (!foundStudent) {
-      const markedStudent = students.find((s) => s.id === studentId);
-      if (markedStudent && hasAttendanceToday(markedStudent, today)) {
-        toast.warning(`${markedStudent.name} đã được điểm danh hôm nay`);
-      } else {
-        toast.error("Student not found");
+  const resolveStudentFromLookup = useCallback(
+    (lookup: string): StudentRecord | undefined => {
+      const trimmed = lookup.trim();
+      if (!trimmed) return undefined;
+
+      const byIdOrQr = students.find(
+        (student) => student.id === trimmed || student.qrCode === trimmed,
+      );
+      if (byIdOrQr) return byIdOrQr;
+
+      const lower = trimmed.toLowerCase();
+      return students.find((student) => student.name.toLowerCase() === lower);
+    },
+    [students],
+  );
+
+  const addStudentToScannedList = useCallback(
+    (student: StudentRecord, successPrefix = "Scanned") => {
+      const todayRecord = getTodayAttendanceRecord(student, today);
+
+      if (todayRecord?.status === "present") {
+        toast.warning(`${student.name} đã được điểm danh hôm nay`);
+        return;
       }
-      return;
-    }
 
-    const alreadyScanned = scannedStudents.some(
-      (entry) => entry.studentId === studentId,
-    );
-    if (alreadyScanned) {
-      toast.warning("Student already scanned");
-      return;
-    }
+      if (todayRecord?.isLate) {
+        toast.warning(`${student.name} đã được ghi nhận đi muộn hôm nay`);
+        return;
+      }
 
-    const timestamp = getVietnamTimestampString();
-    setScannedStudents((prev) => [...prev, { studentId, timestamp }]);
-    toast.success(
-      `Scanned ${foundStudent.name} at ${formatVietnamTime(timestamp)}`,
-    );
-  };
+      const timestamp = getVietnamTimestampString();
+      let scanResult: "added" | "duplicate" | null = null;
 
-  const handleManualEntry = (e: React.FormEvent<HTMLFormElement>) => {
+      setScannedStudents((prev) => {
+        if (prev.some((entry) => entry.studentId === student.id)) {
+          scanResult = "duplicate";
+          return prev;
+        }
+
+        scanResult = "added";
+        return [...prev, { studentId: student.id, timestamp }];
+      });
+
+      if (scanResult === "duplicate") {
+        toast.warning(`${student.name} đã có trong danh sách quét`);
+        return;
+      }
+
+      if (scanResult === "added") {
+        toast.success(
+          `${successPrefix} ${student.name} at ${formatVietnamTime(timestamp)}`,
+        );
+      }
+    },
+    [today],
+  );
+
+  const handleScan = useCallback(
+    async (lookup: string) => {
+      const trimmed = lookup.trim();
+      if (!trimmed) return;
+
+      try {
+        let student = resolveStudentFromLookup(trimmed);
+
+        if (!student) {
+          const classId =
+            user?.role === "teacher" && user.classId ? user.classId : undefined;
+          student =
+            (await getStudentAttendanceByCode(trimmed, { classId })) ??
+            undefined;
+        }
+
+        if (!student) {
+          toast.error("Student not found");
+          return;
+        }
+
+        addStudentToScannedList(student);
+      } catch {
+        toast.error("Unable to verify student.");
+      }
+    },
+    [addStudentToScannedList, resolveStudentFromLookup, user],
+  );
+
+  const { setVideoRef, errorScan, handleOpenScanner, handleCloseScanner } =
+    useQrCameraScanner({
+      autoStart: true,
+      stopAfterScan: false,
+      onScan: handleScan,
+    });
+
+  const handleManualEntry = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!manualId.trim()) {
-      toast.error("Please enter a student ID");
+    const query = manualName.trim();
+    if (!query) {
+      toast.error("Please enter a student name");
       return;
     }
 
-    const studentId = manualId.trim();
-    const foundStudent = studentsPendingToday.find((s) => s.id === studentId);
-    if (!foundStudent) {
-      const markedStudent = students.find((s) => s.id === studentId);
-      if (markedStudent && hasAttendanceToday(markedStudent, today)) {
-        toast.warning(`${markedStudent.name} đã được điểm danh hôm nay`);
-      } else {
-        toast.error("Student not found");
-      }
+    const matches = unscannedStudents.filter((student) =>
+      student.name.toLowerCase().includes(query.toLowerCase()),
+    );
+    if (matches.length === 0) {
+      toast.error("Student not found");
+      setManualName("");
       return;
     }
 
-    handleScan(studentId);
-    setManualId("");
+    addStudentToScannedList(matches[0], "Added");
+    setManualName("");
   };
 
   const handleCompleteAttendance = async () => {
@@ -249,6 +264,12 @@ export function QRScanner() {
 
     if (studentsPendingToday.length === 0) {
       toast.error("All students already marked attendance today");
+      setLoading(false);
+      return;
+    }
+
+    if (!user?.classId) {
+      toast.error("Teacher not assigned to a class.");
       setLoading(false);
       return;
     }
@@ -268,46 +289,100 @@ export function QRScanner() {
     );
 
     let presentCount = 0;
+    let lateCount = 0;
     let absentCount = 0;
     let errorCount = 0;
 
     for (const student of studentsPendingToday) {
       const scanned = scannedById.get(student.id);
+      const todayRecord = getTodayAttendanceRecord(student, todayDate);
 
       try {
+        if (scanned) {
+          if (!todayRecord) {
+            await saveAttendanceRecord({
+              studentId: student.id,
+              date: todayDate,
+              status: "present",
+              timestamp: scanned.timestamp,
+              createdById: user.id,
+              classId: user.classId,
+              semesterId,
+            });
+            presentCount++;
+            continue;
+          }
+
+          if (todayRecord.status === "excused_absence") {
+            if (!todayRecord.leaveRequestId) {
+              throw new Error(
+                `${student.name} có điểm danh nghỉ phép nhưng không tìm thấy đơn xin nghỉ liên quan.`,
+              );
+            }
+
+            await cancelLeaveRequest(todayRecord.leaveRequestId);
+          }
+
+          if (
+            todayRecord.status === "absent" ||
+            todayRecord.status === "excused_absence"
+          ) {
+            await updateAttendanceRecord({
+              id: todayRecord.id,
+              status: "present",
+              timestamp: scanned.timestamp,
+              createdById: user.id,
+              classId: user.classId,
+              semesterId,
+              isLate: true,
+            });
+            lateCount++;
+          }
+
+          continue;
+        }
+
+        if (todayRecord?.status === "excused_absence") {
+          continue;
+        }
+
+        if (todayRecord?.status === "absent") {
+          absentCount++;
+          continue;
+        }
+
         await saveAttendanceRecord({
           studentId: student.id,
           date: todayDate,
-          status: scanned ? "present" : "absent",
-          timestamp: scanned ? scanned.timestamp : absentTimestamp,
+          status: "absent",
+          timestamp: absentTimestamp,
           createdById: user.id,
           classId: user.classId,
           semesterId,
         });
-
-        if (scanned) {
-          presentCount++;
-        } else {
-          absentCount++;
-        }
+        absentCount++;
       } catch (error) {
         console.error("Failed to save attendance record:", error);
         errorCount++;
-        toast.error(`Failed to save attendance for ${student.name}`);
+        const message =
+          error instanceof Error
+            ? error.message
+            : `Failed to save attendance for ${student.name}`;
+        toast.error(message);
       }
     }
 
     setScannedStudents([]);
 
+    const savedCount = presentCount + lateCount + absentCount;
     if (errorCount === 0) {
       toast.success(
-        `Attendance completed: ${presentCount} present, ${absentCount} absent`,
+        `Attendance completed: ${presentCount} present, ${lateCount} late, ${absentCount} absent`,
       );
       await loadStudents();
-    } else if (presentCount + absentCount > 0) {
-      toast.warning(
-        `Saved ${presentCount + absentCount} record(s), ${errorCount} failed`,
-      );
+    } else if (savedCount > 0) {
+      toast.warning(`Saved ${savedCount} record(s), ${errorCount} failed`);
+      await loadStudents();
     } else {
       toast.error("Could not save any attendance records");
     }
@@ -408,7 +483,7 @@ export function QRScanner() {
               Scan QR Code
             </Typography>
 
-            {showDemoQR || (
+            {!showDemoQR && (
               <Box
                 sx={{
                   border: "2px dashed #ccc",
@@ -419,12 +494,15 @@ export function QRScanner() {
                   mb: 2,
                 }}
               >
+                {errorScan && (
+                  <Typography variant="body2" color="error" sx={{ mb: 2 }}>
+                    {errorScan}
+                  </Typography>
+                )}
                 <video
-                  ref={(node) => {
-                    videoRef.current = node;
-                    setVideoElement(node);
-                  }}
+                  ref={setVideoRef}
                   className="min-h-[280px] w-full rounded-2xl bg-black object-cover"
+                  autoPlay
                   muted
                   playsInline
                 />
@@ -441,7 +519,15 @@ export function QRScanner() {
               <Button
                 variant="default"
                 size="lg"
-                onClick={() => setShowDemoQR(!showDemoQR)}
+                onClick={() => {
+                  if (showDemoQR) {
+                    setShowDemoQR(false);
+                    handleOpenScanner();
+                  } else {
+                    handleCloseScanner();
+                    setShowDemoQR(true);
+                  }
+                }}
                 className="mt-2"
               >
                 {showDemoQR ? "Hide Demo QR" : "Show Demo QR Codes"}
@@ -461,8 +547,8 @@ export function QRScanner() {
                       <Label className="text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">
                         Click on any QR code to simulate scanning
                       </Label>
-                      {alreadyMarkedCount} student(s) đã điểm danh hôm nay và
-                      không hiển thị trong danh sách quét.
+                      {alreadyMarkedCount} student(s) has been marked attendance
+                      today and not shown in the scanned list.
                     </Alert>
                     <Box
                       sx={{
@@ -495,7 +581,7 @@ export function QRScanner() {
                       ) : unscannedStudents.length === 0 ? (
                         <Typography variant="body2" color="text.secondary">
                           {studentsPendingToday.length === 0
-                            ? "Tất cả học sinh đã được điểm danh hôm nay"
+                            ? "All students have been marked attendance today"
                             : "All students in this session have been scanned"}
                         </Typography>
                       ) : (
@@ -538,6 +624,8 @@ export function QRScanner() {
                                   fontWeight: 600,
                                 }}
                               >
+                                {student.holy_name}
+                                {""}
                                 {student.name}
                               </Typography>
                             </MotionBox>
@@ -557,16 +645,16 @@ export function QRScanner() {
               <div className="flex gap-2">
                 <Input
                   id="manualId"
-                  placeholder="Enter Student ID"
+                  placeholder="Enter Student Name"
                   type="text"
-                  value={manualId}
-                  onChange={(e) => setManualId(e.target.value)}
+                  value={manualName}
+                  onChange={(e) => setManualName(e.target.value)}
                   className="h-12 rounded-xl border-zinc-200 bg-zinc-50 text-base focus-visible:ring-indigo-500 dark:border-zinc-700 dark:bg-zinc-800/50"
                 />
                 <Button
                   type="submit"
                   className="h-12 rounded-xl bg-indigo-600 text-base font-semibold shadow-indigo-600/20 hover:bg-indigo-700"
-                  disabled={!manualId.trim()}
+                  disabled={!manualName.trim()}
                 >
                   <Plus size={18} />
                   Add

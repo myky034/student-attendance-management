@@ -340,6 +340,27 @@ export type RejectLeaveRequestInput = {
   status: string;
 };
 
+export async function cancelLeaveRequest(id: string): Promise<LeaveRequest> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("LeaveRequest")
+    .update({
+      status: "cancelled",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", Number(id))
+    .select(leaveRequestBaseSelect)
+    .single();
+
+  if (error) {
+    console.error("cancelLeaveRequest error:", error);
+    throw new Error(`Failed to cancel leave request: ${error.message}`);
+  }
+
+  const [mapped] = await mapLeaveRequestRows([data as LeaveRequestRow]);
+  return mapped;
+}
+
 export async function getLeaveRequests(): Promise<LeaveRequest[]> {
   const supabase = createClient();
   return queryLeaveRequests(async (select) => {

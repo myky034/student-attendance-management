@@ -46,7 +46,7 @@ export function AdminLayout() {
   ];
 
   return (
-    <div className="min-h-screen flex flex-col bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50 font-sans">
+    <div className="min-h-screen flex flex-col text-zinc-900 dark:text-zinc-50 font-sans">
       <nav className="sticky top-0 z-50 bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-red-500/10 backdrop-blur-md border-b border-amber-200 dark:border-amber-900/50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16 items-center">

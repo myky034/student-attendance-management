@@ -57,6 +57,16 @@ function toDateOnly(value: string): string {
   return value.split("T")[0];
 }
 
+function formatSupabaseError(error: {
+  code?: string;
+  message?: string;
+}): string {
+  if (error.code === "42501") {
+    return "Permission denied on AttendanceRecord (RLS). Run prisma/rls-attendance-leave.sql in Supabase SQL Editor.";
+  }
+  return error.message ?? "Attendance record operation failed.";
+}
+
 function mapAttendanceRecordRow(row: AttendanceRecordRow): AttendanceRecord {
   return {
     id: row.id,
@@ -81,6 +91,7 @@ function buildWritePayload(input: {
   classId: string;
   leaveRequestId?: string | null;
   semesterId?: string | null;
+  isLate?: boolean;
 }) {
   const payload: Record<string, unknown> = {
     status: input.status,
@@ -103,6 +114,9 @@ function buildWritePayload(input: {
   }
   if (input.semesterId != null && input.semesterId !== "") {
     payload.semester_id = Number(input.semesterId);
+  }
+  if (input.isLate != null) {
+    payload.is_late = input.isLate;
   }
 
   return payload;
@@ -181,13 +195,14 @@ export async function createAttendanceRecord(
   const supabase = createClient();
   const date = input.date ? toDateOnly(input.date) : getVietnamDateString();
   const timestamp = toVietnamTimestamp(input.timestamp, date);
-  const semesterId =
-    input.semesterId ?? (await resolveSemesterIdForDate(date));
+  const semesterId = input.semesterId ?? (await resolveSemesterIdForDate(date));
 
   const { data, error } = await supabase
     .from("AttendanceRecord")
     .insert({
       id: input.id,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
       ...buildWritePayload({
         studentId: input.studentId,
         date,
@@ -203,7 +218,7 @@ export async function createAttendanceRecord(
     .single();
   if (error) {
     console.error("createAttendanceRecord error:", error);
-    throw error;
+    throw new Error(formatSupabaseError(error));
   }
   return mapAttendanceRecordRow(data as AttendanceRecordRow);
 }
@@ -216,6 +231,7 @@ export type UpdateAttendanceRecordInput = {
   leaveRequestId?: string | null;
   classId: string;
   semesterId?: string | null;
+  isLate?: boolean;
 };
 
 export async function updateAttendanceRecord(
@@ -223,24 +239,27 @@ export async function updateAttendanceRecord(
 ): Promise<AttendanceRecord> {
   const supabase = createClient();
   const timestamp = toVietnamTimestamp(input.timestamp);
+  const payload = buildWritePayload({
+    status: input.status,
+    timestamp,
+    createdById: input.createdById,
+    classId: input.classId,
+    leaveRequestId: input.leaveRequestId,
+    semesterId: input.semesterId,
+    isLate: input.isLate,
+  });
+
+  payload.updated_at = new Date().toISOString();
+
   const { data, error } = await supabase
     .from("AttendanceRecord")
-    .update(
-      buildWritePayload({
-        status: input.status,
-        timestamp,
-        createdById: input.createdById,
-        classId: input.classId,
-        leaveRequestId: input.leaveRequestId,
-        semesterId: input.semesterId,
-      }),
-    )
+    .update(payload)
     .eq("id", input.id)
     .select()
     .single();
   if (error) {
     console.error("updateAttendanceRecord error:", error);
-    throw error;
+    throw new Error(formatSupabaseError(error));
   }
   return mapAttendanceRecordRow(data as AttendanceRecordRow);
 }
@@ -262,8 +281,7 @@ export async function saveAttendanceRecord(
 ): Promise<AttendanceRecord> {
   const date = input.date ? toDateOnly(input.date) : getVietnamDateString();
   const timestamp = toVietnamTimestamp(input.timestamp, date);
-  const semesterId =
-    input.semesterId ?? (await resolveSemesterIdForDate(date));
+  const semesterId = input.semesterId ?? (await resolveSemesterIdForDate(date));
 
   const existing = await getAttendanceRecords({
     studentId: input.studentId,
@@ -277,7 +295,8 @@ export async function saveAttendanceRecord(
       status: input.status,
       timestamp,
       createdById: input.createdById,
-      leaveRequestId: input.leaveRequestId ?? existing[0].leaveRequestId ?? null,
+      leaveRequestId:
+        input.leaveRequestId ?? existing[0].leaveRequestId ?? null,
       classId: input.classId,
       semesterId: semesterId ?? existing[0].semesterId ?? null,
     });

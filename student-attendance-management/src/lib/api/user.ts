@@ -108,18 +108,25 @@ export type SaveUserInput = {
 };
 
 /* Get all users from the database */
-export async function getUsers(searchQuery: string): Promise<UserRecord[]> {
+export async function getUsers(
+  searchQuery: string = "",
+): Promise<UserRecord[]> {
   const supabase = createClient();
-  const { data, error } = await supabase
+  let query = supabase
     .from("User")
     .select(userSelect)
-    .eq("role", "teacher")
     .or("isDeleted.eq.false,isDeleted.is.null")
-    .ilike("name", `%${searchQuery}%`)
-    .ilike("email", `%${searchQuery}%`)
-    .ilike("username", `%${searchQuery}%`)
     .order("name", { ascending: true })
     .order("createdAt", { ascending: true });
+
+  if (searchQuery) {
+    query = query
+      .ilike("name", `%${searchQuery}%`)
+      .ilike("email", `%${searchQuery}%`)
+      .ilike("username", `%${searchQuery}%`);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     console.error("getUsers error:", error);

@@ -1,6 +1,7 @@
 import { createBrowserRouter } from "react-router";
 import { SplashScreen } from "../pages/SplashScreen";
 import { Login } from "../pages/Login";
+import { RootLayout } from "../components/RootLayout";
 import { AdminLayout } from "../components/AdminLayout";
 import { AdminDashboard } from "../pages/AdminDashboard";
 import { AppLayout } from "../components/AppLayout";
@@ -14,67 +15,74 @@ import { AttendanceReport } from "@/pages/AttendanceReport";
 import { ParentLayout } from "@/components/ParentLayout";
 import { ParentPortal } from "@/pages/ParentPortal";
 import { LeaveRequests } from "@/pages/LeaveRequests";
+import { AuditLogs } from "@/pages/AuditLogs";
 
 export const router = createBrowserRouter([
   {
-    path: "/",
-    Component: SplashScreen,
-  },
-  {
-    path: "/login",
-    Component: Login,
-  },
-  {
-    path: "/parent-portal",
-    Component: ParentLayout,
+    Component: RootLayout,
     children: [
       {
-        path: "",
-        Component: ParentPortal,
-      },
-    ],
-  },
-  {
-    path: "/admin",
-    Component: AdminLayout,
-    children: [
-      {
-        path: "dashboard",
-        Component: AdminDashboard,
+        path: "/",
+        Component: SplashScreen,
       },
       {
-        path: "students",
-        Component: Students,
+        path: "/login",
+        Component: Login,
       },
       {
-        path: "settings",
-        Component: Settings,
-      },
-    ],
-  },
-  {
-    path: "/",
-    Component: AppLayout,
-    children: [
-      {
-        path: "dashboard",
-        Component: DashboardPage,
+        path: "/parent-portal",
+        Component: ParentLayout,
+        children: [
+          {
+            path: "",
+            Component: ParentPortal,
+          },
+        ],
       },
       {
-        path: "qrscanner",
-        Component: QRScanner,
+        path: "/admin",
+        Component: AdminLayout,
+        children: [
+          {
+            path: "dashboard",
+            Component: AdminDashboard,
+          },
+          {
+            path: "students",
+            Component: Students,
+          },
+          {
+            path: "settings",
+            Component: Settings,
+          },
+        ],
       },
       {
-        path: "leave-requests",
-        Component: LeaveRequests,
+        path: "/",
+        Component: AppLayout,
+        children: [
+          {
+            path: "dashboard",
+            Component: DashboardPage,
+          },
+          {
+            path: "qrscanner",
+            Component: QRScanner,
+          },
+          {
+            path: "leave-requests",
+            Component: LeaveRequests,
+          },
+          {
+            path: "users/create",
+            Component: UserFormPage,
+          },
+          { path: "users/edit/:userId", Component: UserFormPage },
+          { path: "users/detail/:userId", Component: UserFormDetail },
+          { path: "attendance-report", Component: AttendanceReport },
+          { path: "audit-logs", Component: AuditLogs },
+        ],
       },
-      {
-        path: "users/create",
-        Component: UserFormPage,
-      },
-      { path: "users/edit/:userId", Component: UserFormPage },
-      { path: "users/detail/:userId", Component: UserFormDetail },
-      { path: "attendance-report", Component: AttendanceReport },
     ],
   },
 ]);

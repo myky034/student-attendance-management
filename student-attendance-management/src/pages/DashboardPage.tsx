@@ -28,6 +28,13 @@ import {
   AlertDialogTrigger,
 } from "../components/ui/alert-dialog";
 import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "../components/ui/select";
+import {
   UserIcon,
   ChevronDown,
   Search,
@@ -75,6 +82,19 @@ import { toast } from "sonner";
 import { ImportUserModal } from "@/components/ImportUserModal";
 
 const ITEM_PER_PAGE = 15;
+
+function normalizeAttendanceDate(date: string): string {
+  return date.split("T")[0];
+}
+
+function getTodayAttendanceRecord(
+  student: StudentRecord,
+  today: string,
+): StudentRecord["studentAttendance"][number] | undefined {
+  return student.studentAttendance.find(
+    (record) => normalizeAttendanceDate(record.date) === today,
+  );
+}
 
 type StudentsFetchResult = {
   students: StudentRecord[];
@@ -219,9 +239,7 @@ function StudentList({
   };
 
   const todayDate = getVietnamDateString();
-  const todayAttendance = student.studentAttendance.find(
-    (r) => r.date === todayDate,
-  );
+  const todayAttendance = getTodayAttendanceRecord(student, todayDate);
 
   return (
     <>
@@ -260,7 +278,7 @@ function StudentList({
                 </div>
                 <div>
                   <p className="font-medium text-zinc-900 dark:text-zinc-50">
-                    {student.name}
+                    {student.holy_name ? student.holy_name : ""} {student.name}
                   </p>
                   <p className="text-xs text-zinc-500 dark:text-zinc-400">
                     ID: {student.id}
@@ -525,6 +543,11 @@ function StudentList({
                                       ? "Excused Absence"
                                       : "Absent"}
                                 </Badge>
+                                {record.isLate && (
+                                  <Badge variant="warning" className="ml-2">
+                                    Late
+                                  </Badge>
+                                )}
                               </TableCell>
                               <TableCell>
                                 {formatVietnamTime(record.timestamp)}
@@ -561,6 +584,8 @@ export function DashboardPage() {
   const { user } = useAppContext();
   const navigate = useNavigate();
   const [studentPage, setStudentPage] = useState(1);
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [attendanceFilter, setAttendanceFilter] = useState("all");
   const [importUserModalOpen, setImportUserModalOpen] = useState(false);
   const [className, setClassName] = useState<string | null>(null);
   const [yearAttendanceRecords, setYearAttendanceRecords] = useState<
@@ -674,15 +699,47 @@ export function DashboardPage() {
   }, [user]);
 
   const filteredStudents = useMemo(() => {
-    if (!searchTerm.trim()) return students;
+    let result = students;
+    const todayDate = getVietnamDateString();
+
+    if (statusFilter === "active") {
+      result = result.filter((student) => student.isActive);
+    } else if (statusFilter === "inactive") {
+      result = result.filter((student) => !student.isActive);
+    } else if (statusFilter === "locked") {
+      result = result.filter((student) => student.isLocked);
+    }
+
+    if (attendanceFilter === "present") {
+      result = result.filter(
+        (student) =>
+          getTodayAttendanceRecord(student, todayDate)?.status === "present",
+      );
+    } else if (attendanceFilter === "absent") {
+      result = result.filter(
+        (student) =>
+          getTodayAttendanceRecord(student, todayDate)?.status === "absent",
+      );
+    } else if (attendanceFilter === "excused_absence") {
+      result = result.filter(
+        (student) =>
+          getTodayAttendanceRecord(student, todayDate)?.status ===
+          "excused_absence",
+      );
+    }
+
+    if (!searchTerm.trim()) return result;
 
     const q = searchTerm.toLowerCase();
-    return students.filter(
+    return result.filter(
       (student) =>
+        student.id.toLowerCase().includes(q) ||
+        student.qrCode.toLowerCase().includes(q) ||
+        student.holy_name?.toLowerCase().includes(q) ||
         student.name.toLowerCase().includes(q) ||
         student.email.toLowerCase().includes(q),
     );
-  }, [students, searchTerm]);
+  }, [students, searchTerm, statusFilter, attendanceFilter]);
 
   const attendanceRateByStudentId = useMemo(() => {
     const recordsByStudent = yearAttendanceRecords.reduce<
@@ -714,7 +771,7 @@ export function DashboardPage() {
   );
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 flex flex-col overflow-hidden">
       <div className="flex justify-between items-center">
         <div>
           <div className="flex items-center gap-3 mb-2">
@@ -768,7 +825,7 @@ export function DashboardPage() {
                       : "Students"}
                   </CardTitle>
                   <Chip
-                    label={students.length}
+                    label={filteredStudents.length}
                     size="small"
                     sx={{
                       color: "white",
@@ -804,18 +861,77 @@ export function DashboardPage() {
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="relative max-w-sm">
-              <Search
-                size={16}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400"
-              />
-              <input
-                type="search"
-                placeholder="Search by name or email..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full rounded-lg border border-zinc-200 bg-white py-2 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
-              />
+            <div className="flex gap-3">
+              <div className="relative max-w-sm flex-1">
+                <Search
+                  size={16}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400"
+                />
+                <input
+                  type="search"
+                  placeholder="Search by id, name, holy name or email..."
+                  value={searchTerm}
+                  onChange={(e) => {
+                    setSearchTerm(e.target.value);
+                    setStudentPage(1);
+                  }}
+                  className="w-full rounded-lg border border-zinc-200 bg-white py-2 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+                />
+              </div>
+              <div className="flex-1 max-w-sm min-w-40">
+                <Select
+                  value={statusFilter}
+                  onValueChange={(value) => {
+                    setStatusFilter(value);
+                    setStudentPage(1);
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="All" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All</SelectItem>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="inactive">Inactive</SelectItem>
+                    <SelectItem value="locked">Locked</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex-1 max-w-sm min-w-40">
+                <Select
+                  value={attendanceFilter}
+                  onValueChange={(value) => {
+                    setAttendanceFilter(value);
+                    setStudentPage(1);
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="All" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All</SelectItem>
+                    <SelectItem value="present">Present</SelectItem>
+                    <SelectItem value="absent">Absent</SelectItem>
+                    <SelectItem value="excused_absence">
+                      Excused Absence
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setSearchTerm("");
+                    setStatusFilter("all");
+                    setAttendanceFilter("all");
+                    setStudentPage(1);
+                  }}
+                >
+                  Clear Filters
+                </Button>
+              </div>
             </div>
             <Table>
               <TableHeader>
@@ -830,13 +946,15 @@ export function DashboardPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {students.length === 0 ? (
+                {filteredStudents.length === 0 ? (
                   <TableRow>
                     <TableCell
                       colSpan={7}
                       className="h-24 text-center text-zinc-500"
                     >
-                      No students found in the system yet.
+                      {students.length === 0
+                        ? "No students found in the system yet."
+                        : "No students match the current filters."}
                     </TableCell>
                   </TableRow>
                 ) : (

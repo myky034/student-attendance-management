@@ -29,6 +29,7 @@ export const UserFormPage = () => {
   const [submitting, setSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
+    holy_name: "",
     email: "",
     username: "",
     password: "",
@@ -36,6 +37,7 @@ export const UserFormPage = () => {
   });
   const [errors, setErrors] = useState({
     name: "",
+    holy_name: "",
     email: "",
     username: "",
   });
@@ -53,6 +55,7 @@ export const UserFormPage = () => {
         if (student) {
           setFormData({
             name: student.name,
+            holy_name: student.holy_name,
             email: student.email,
             username: student.username,
             password: "",
@@ -88,12 +91,16 @@ export const UserFormPage = () => {
   const validateForm = () => {
     const newErrors = {
       name: "",
+      holy_name: "",
       email: "",
       username: "",
     };
 
     if (!formData.name.trim()) {
       newErrors.name = "Name is required";
+    }
+    if (!formData.holy_name.trim()) {
+      newErrors.holy_name = "Holy Name is required";
     }
     if (!formData.email.trim()) {
       newErrors.email = "Email is required";
@@ -123,6 +130,7 @@ export const UserFormPage = () => {
       await saveStudent({
         id: isEditMode ? userId : undefined,
         name: formData.name.trim(),
+        holy_name: formData.holy_name.trim(),
         email: formData.email.trim(),
         username: formData.username.trim(),
         qrCode: formData.qrCode,
@@ -229,6 +237,20 @@ export const UserFormPage = () => {
                 </Button>
               )}
             </Paper>
+
+            <div className="space-y-2">
+              <Label htmlFor="holy_name">Holy Name</Label>
+              <Input
+                id="holy_name"
+                value={formData.holy_name}
+                onChange={handleChange("holy_name")}
+                placeholder="Enter holy name"
+                className={errors.holy_name ? "border-red-500" : ""}
+              />
+              {errors.holy_name && (
+                <p className="text-sm text-red-500">{errors.holy_name}</p>
+              )}
+            </div>
 
             <div className="space-y-2">
               <Label htmlFor="name">Full Name</Label>

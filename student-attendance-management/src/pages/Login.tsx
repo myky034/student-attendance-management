@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router";
 import { motion } from "motion/react";
-import { Zap, AlertCircle, LogIn, Eye, EyeOff } from "lucide-react";
+import { AlertCircle, LogIn, Eye, EyeOff, Sparkles } from "lucide-react";
 import { authenticateUser } from "@/lib/api/user";
 import { useAppContext } from "../context/useAppContext";
 import type { User, UserRole } from "../context/appContext";
@@ -81,12 +81,7 @@ export function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 flex flex-col items-center justify-center p-4 sm:p-8 overflow-hidden font-sans">
-      <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-indigo-500/10 dark:bg-indigo-500/5 rounded-full blur-3xl" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-emerald-500/10 dark:bg-emerald-500/5 rounded-full blur-3xl" />
-      </div>
-
+    <div className="min-h-screen flex flex-col items-center justify-center p-4 sm:p-8 font-sans">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -95,7 +90,7 @@ export function Login() {
         <div className="p-8">
           <div className="flex justify-center mb-6">
             <div className="w-16 h-16 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-2xl flex items-center justify-center">
-              <Zap size={32} className="fill-current" />
+              <Sparkles size={32} className="fill-current" />
             </div>
           </div>
           <h2 className="text-2xl font-bold text-center mb-2 text-zinc-900 dark:text-zinc-50">
@@ -169,11 +164,6 @@ export function Login() {
               <span>{isSubmitting ? "Logging in..." : "Log In"}</span>
             </button>
           </form>
-
-          <div className="mt-6 text-center text-sm text-zinc-500 dark:text-zinc-400">
-            Use the email and password stored in the <strong>User</strong>{" "}
-            table.
-          </div>
         </div>
       </motion.div>
     </div>

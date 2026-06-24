@@ -46,7 +46,7 @@ function ImportCellValue({
         "bg-indigo-50 text-indigo-800 ring-1 ring-inset ring-indigo-200",
         "dark:bg-indigo-950/60 dark:text-indigo-200 dark:ring-indigo-700/60",
       )}
-      title="Hệ thống tự generate"
+      title="System generated"
     >
       <span className="truncate font-medium">{value}</span>
       <span
@@ -124,7 +124,7 @@ export function ImportUserModal({
 
     if (!isSupportedImportFile(file.name)) {
       setFileName(null);
-      setError("Chỉ hỗ trợ file CSV, TXT, XLSX hoặc XLS");
+      setError("Only CSV, TXT, XLSX, XLS files are supported");
       e.target.value = "";
       return;
     }
@@ -145,7 +145,7 @@ export function ImportUserModal({
 
       if (rawRows.length === 0) {
         setFileName(null);
-        setError("File không có dữ liệu");
+        setError("File has no data");
         return;
       }
 
@@ -155,14 +155,14 @@ export function ImportUserModal({
       if (invalidRowNumbers.length > 0) {
         setFileName(null);
         setError(
-          `Cột Name không được để trống (dòng: ${invalidRowNumbers.join(", ")})`,
+          `Column Name cannot be empty (row: ${invalidRowNumbers.join(", ")})`,
         );
         return;
       }
 
       if (validRows.length === 0) {
         setFileName(null);
-        setError("Không tìm thấy học sinh hợp lệ trong file");
+        setError("No valid students found in the file");
         return;
       }
 
@@ -178,7 +178,7 @@ export function ImportUserModal({
       console.error("File parse error:", err);
       setFileName(null);
       setParsedData([]);
-      setError("Không đọc được file. Vui lòng kiểm tra định dạng.");
+      setError("Cannot read file. Please check the format.");
     } finally {
       e.target.value = "";
     }
@@ -190,8 +190,8 @@ export function ImportUserModal({
     if (!user?.classId) {
       toast.error(
         user?.role === "teacher"
-          ? "Teacher chưa được gán lớp (classId)"
-          : "Tài khoản chưa có classId để import học sinh",
+          ? "Teacher has not been assigned a class (classId)"
+          : "Account has no classId to import students",
       );
       return;
     }
@@ -203,6 +203,7 @@ export function ImportUserModal({
       const rowsToImport = buildImportPreviewRows(
         parsedData.map((row) => ({
           name: row.name,
+          holy_name: row.holy_name,
           email: row.isEmailGenerated ? "" : row.email,
           username: row.isUsernameGenerated ? "" : row.username,
           role: row.role,
@@ -214,11 +215,14 @@ export function ImportUserModal({
       await importStudents(
         rowsToImport.map((row) => ({
           name: row.name,
+          holy_name: row.holy_name,
           email: row.email,
           username: row.username,
           password: generatePassword(),
           qrCode: generateQRCode(),
           classId: user.classId,
+          isActive: true,
+          isLocked: false,
         })),
       );
 
@@ -227,7 +231,7 @@ export function ImportUserModal({
       handleClose();
     } catch (err) {
       console.error("Import students error:", err);
-      toast.error("Import thất bại. Kiểm tra dữ liệu trùng email/username.");
+      toast.error("Import failed. Check duplicate email/username data.");
     } finally {
       setSubmitting(false);
     }
@@ -260,9 +264,7 @@ export function ImportUserModal({
       >
         <DialogHeader className="shrink-0 pb-2">
           <DialogTitle>Import Students</DialogTitle>
-          <DialogDescription>
-            Upload CSV hoặc Excel. Chỉ cột Name là bắt buộc.
-          </DialogDescription>
+          <DialogDescription>Upload CSV or Excel file.</DialogDescription>
         </DialogHeader>
 
         <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden py-2 sm:gap-4 sm:py-3">
@@ -278,8 +280,7 @@ export function ImportUserModal({
                 Click to upload a file
               </h3>
               <p className="max-w-md text-zinc-500 dark:text-zinc-400">
-                Hỗ trợ CSV, TXT, XLSX, XLS. Cột bắt buộc: <strong>Name</strong>.
-                Email/Username có thể để trống — hệ thống tự sinh khi import.
+                Supported files: CSV, TXT, XLSX, XLS.
               </p>
             </div>
           ) : (
@@ -320,16 +321,16 @@ export function ImportUserModal({
                   <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800">
                     <div className="flex flex-wrap items-center gap-3 border-b border-zinc-200 bg-zinc-50 px-3 py-2 text-xs sm:px-4 dark:border-zinc-800 dark:bg-zinc-900/80">
                       <span className="text-zinc-500 dark:text-zinc-400">
-                        Chú thích:
+                        Note:
                       </span>
                       <span className="inline-flex items-center gap-1.5 rounded-md bg-indigo-50 px-2 py-1 font-medium text-indigo-800 ring-1 ring-inset ring-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-200 dark:ring-indigo-700/60">
-                        Giá trị highlight
+                        Highlighted value
                         <span className="rounded bg-indigo-100 px-1 py-0.5 text-[10px] font-semibold uppercase text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300">
                           Auto
                         </span>
                       </span>
                       <span className="text-zinc-500 dark:text-zinc-400">
-                        = hệ thống tự sinh từ Name
+                        = system generated from Name
                       </span>
                     </div>
                     <div className="min-h-0 flex-1 overflow-auto">
@@ -338,6 +339,9 @@ export function ImportUserModal({
                           <tr>
                             <th className="px-3 py-2.5 text-center font-semibold sm:px-4 sm:py-3">
                               #
+                            </th>
+                            <th className="px-3 py-2.5 font-semibold sm:px-4 sm:py-3">
+                              Holy Name
                             </th>
                             <th className="px-3 py-2.5 font-semibold sm:px-4 sm:py-3">
                               Name
@@ -363,6 +367,9 @@ export function ImportUserModal({
                                 {(currentImportPage - 1) * ITEMS_PER_PAGE +
                                   i +
                                   1}
+                              </td>
+                              <td className="px-3 py-2.5 sm:px-4 sm:py-3">
+                                {row.holy_name ? row.holy_name : "-"}
                               </td>
                               <td className="px-3 py-2.5 sm:px-4 sm:py-3">
                                 {row.name}
