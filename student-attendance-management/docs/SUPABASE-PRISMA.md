@@ -2,6 +2,8 @@
 
 Tài liệu mô tả các thay đổi liên quan Supabase và Prisma, luồng chạy, ý nghĩa từng file, và hướng dẫn vận hành.
 
+**Tài liệu liên quan:** [DATABASE-SCHEMA.md](./DATABASE-SCHEMA.md) · [API.md](./API.md) · [TECHSPEC.md](./TECHSPEC.md) · [DEVELOPER-MODULES.md](./DEVELOPER-MODULES.md) · [BRD/SRS theo module](./brd/README.md)
+
 ---
 
 ## 1. Tổng quan kiến trúc
