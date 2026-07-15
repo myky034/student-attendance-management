@@ -8,6 +8,7 @@ import {
   LayoutDashboard,
   Users,
   Settings,
+  History,
 } from "lucide-react";
 import { Link } from "react-router";
 import { useAppContext } from "../context/useAppContext";
@@ -37,16 +38,31 @@ export function AdminLayout() {
     {
       to: "/admin/dashboard",
       label: "Dashboard",
-      icon: <LayoutDashboard size={20} />,
+      shortLabel: "Home",
+      icon: LayoutDashboard,
     },
-    { to: "/admin/students", label: "Students", icon: <Users size={20} /> },
-    { to: "/admin/settings", label: "Settings", icon: <Settings size={20} /> },
-    // {to: "/classes", label: "Classes", icon: <Users size={20} />},
-    // {to: "/subjects", label: "Subjects", icon: <Users size={20} />},
+    {
+      to: "/admin/students",
+      label: "Students",
+      shortLabel: "Students",
+      icon: Users,
+    },
+    {
+      to: "/admin/settings",
+      label: "Settings",
+      shortLabel: "Settings",
+      icon: Settings,
+    },
+    {
+      to: "/admin/audit-logs",
+      label: "Audit Logs",
+      shortLabel: "Logs",
+      icon: History,
+    },
   ];
 
   return (
-    <div className="min-h-screen flex flex-col text-zinc-900 dark:text-zinc-50 font-sans">
+    <div className="flex min-h-[100dvh] flex-col text-zinc-900 dark:text-zinc-50 font-sans">
       <nav className="sticky top-0 z-50 bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-red-500/10 backdrop-blur-md border-b border-amber-200 dark:border-amber-900/50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16 items-center">
@@ -56,7 +72,7 @@ export function AdminLayout() {
                   className="text-indigo-600 dark:text-indigo-400 fill-current"
                   size={24}
                 />
-                <span className="text-xl font-bold tracking-tight">
+                <span className="truncate text-lg font-bold tracking-tight sm:text-xl">
                   Attendify
                 </span>
               </div>
@@ -69,6 +85,7 @@ export function AdminLayout() {
             <div className="hidden sm:flex gap-1 ml-10">
               {navLinks.map((link) => {
                 const isActive = location.pathname === link.to;
+                const Icon = link.icon;
                 return (
                   <Link
                     key={link.to}
@@ -79,7 +96,7 @@ export function AdminLayout() {
                         : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
                     }`}
                   >
-                    {link.icon}
+                    <Icon size={20} />
                     {link.label}
                   </Link>
                 );
@@ -111,9 +128,39 @@ export function AdminLayout() {
         </div>
       </nav>
 
-      <main className="flex-1 w-full max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+      <main className="mx-auto flex w-full min-w-0 max-w-7xl flex-1 flex-col px-3 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-8 pb-[calc(4.75rem+env(safe-area-inset-bottom,0px))] sm:pb-6 lg:pb-8">
         <Outlet />
       </main>
+
+      <nav
+        className="fixed inset-x-0 bottom-0 z-50 border-t border-amber-200 bg-white/95 backdrop-blur-md dark:border-amber-900/50 dark:bg-zinc-900/95 sm:hidden"
+        style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
+        aria-label="Mobile navigation"
+      >
+        <div className="mx-auto flex h-16 max-w-7xl items-stretch justify-around">
+          {navLinks.map((link) => {
+            const isActive = location.pathname === link.to;
+            const Icon = link.icon;
+            return (
+              <Link
+                key={link.to}
+                to={link.to}
+                aria-current={isActive ? "page" : undefined}
+                className={`flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-1 py-2 text-[10px] font-medium leading-tight transition-colors ${
+                  isActive
+                    ? "text-amber-600 dark:text-amber-400"
+                    : "text-zinc-500 dark:text-zinc-400"
+                }`}
+              >
+                <Icon size={20} strokeWidth={isActive ? 2.5 : 2} />
+                <span className="w-full truncate text-center">
+                  {link.shortLabel}
+                </span>
+              </Link>
+            );
+          })}
+        </div>
+      </nav>
     </div>
   );
 }

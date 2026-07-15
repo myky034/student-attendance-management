@@ -16,6 +16,7 @@ import { ParentLayout } from "@/components/ParentLayout";
 import { ParentPortal } from "@/pages/ParentPortal";
 import { LeaveRequests } from "@/pages/LeaveRequests";
 import { AuditLogs } from "@/pages/AuditLogs";
+import { AdminAuditLogs } from "@/pages/(admin)/AuditLogs";
 
 export const router = createBrowserRouter([
   {
@@ -52,8 +53,20 @@ export const router = createBrowserRouter([
             Component: Students,
           },
           {
+            path: "students/create",
+            Component: UserFormPage,
+          },
+          {
+            path: "students/edit/:userId",
+            Component: UserFormPage,
+          },
+          {
             path: "settings",
             Component: Settings,
+          },
+          {
+            path: "audit-logs",
+            Component: AdminAuditLogs,
           },
         ],
       },

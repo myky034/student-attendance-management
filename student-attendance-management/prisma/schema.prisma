@@ -29,6 +29,7 @@ model Class {
   grade            Grade              @relation(fields: [gradeId], references: [id])
   LeaveRequest     LeaveRequest[]
   students         User[]
+  auditLogs        AuditLog[]
 }
 
 model User {
@@ -52,6 +53,7 @@ model User {
   LeaveRequest_LeaveRequest_student_idToUser     LeaveRequest[]     @relation("LeaveRequest_student_idToUser")
   LeaveRequest_LeaveRequest_approved_by_idToUser LeaveRequest[]     @relation("LeaveRequest_approved_by_idToUser")
   class                                          Class?             @relation(fields: [classId], references: [id], onDelete: Restrict)
+  auditLogs                                      AuditLog[]
 }
 
 model AttendanceRecord {
@@ -162,4 +164,51 @@ enum LeaveRequestStatus {
   approved
   rejected
   cancelled
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  APPROVE
+  REJECT
+  CANCEL
+  LOCK
+  ACTIVATE
+}
+
+enum AuditEntity {
+  User
+  AttendanceRecord
+  LeaveRequest
+  AcademicYear
+  Semester
+  AttendancePeriodConfig
+  Grade
+  Class
+}
+
+model AuditLog {
+  id        String      @id @default(cuid())
+  userId    String
+  actorRole UserRole
+  action    AuditAction
+  entity    AuditEntity
+  entityId  String?
+  classId   String?
+  oldValue  Json?
+  newValue  Json?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime    @default(now())
+
+  user  User   @relation(fields: [userId], references: [id])
+  class Class? @relation(fields: [classId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([userId])
+  @@index([entity, entityId])
+  @@index([action])
+  @@index([classId])
 }

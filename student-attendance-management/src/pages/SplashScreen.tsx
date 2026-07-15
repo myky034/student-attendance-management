@@ -27,7 +27,7 @@ export function SplashScreen() {
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ delay: 0.3 }}
-          className="text-4xl font-black text-white tracking-tight mb-2"
+          className="px-4 text-center text-2xl font-black tracking-tight text-white sm:text-3xl md:text-4xl mb-2"
         >
           Student Attendance Management
         </motion.h1>
@@ -35,7 +35,7 @@ export function SplashScreen() {
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ delay: 0.5 }}
-          className="text-indigo-200 text-lg font-medium"
+          className="px-4 text-center text-base font-medium text-indigo-200 sm:text-lg"
         >
           Manage student attendance easily and efficiently.
         </motion.p>

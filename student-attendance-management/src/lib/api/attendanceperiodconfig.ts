@@ -1,4 +1,7 @@
 import { createClient } from "@/lib/supabase/client";
+import { writeAuditLog } from "@/lib/audit/writeAuditLog";
+import { warnMissingAudit } from "@/lib/audit/warnMissingAudit";
+import type { AuditContext } from "@/lib/audit/types";
 
 type AttendancePeriodConfigRow = {
   id: number | string;
@@ -138,6 +141,7 @@ export async function getAttendancePeriodConfigById(
 
 export async function createAttendancePeriodConfig(
   attendancePeriodConfig: CreateAttendancePeriodConfigInput,
+  audit?: AuditContext,
 ): Promise<AttendancePeriodConfig | null> {
   const supabase = createClient();
   const { data, error } = await supabase
@@ -159,14 +163,30 @@ export async function createAttendancePeriodConfig(
     console.error("createAttendancePeriodConfig error:", error);
     throw error;
   }
-  return data
+  const result = data
     ? mapAttendancePeriodConfigRow(data as unknown as AttendancePeriodConfigRow)
     : null;
+  if (audit && result) {
+    await writeAuditLog({
+      ...audit,
+      action: "CREATE",
+      entity: "AttendancePeriodConfig",
+      entityId: result.id,
+      newValue: result,
+    });
+  } else if (!audit) {
+    warnMissingAudit("createAttendancePeriodConfig");
+  }
+  return result;
 }
 
 export async function updateAttendancePeriodConfig(
   attendancePeriodConfig: UpdateAttendancePeriodConfigInput,
+  audit?: AuditContext,
 ): Promise<AttendancePeriodConfig | null> {
+  const oldValue = audit
+    ? await getAttendancePeriodConfigById(attendancePeriodConfig.id)
+    : null;
   const supabase = createClient();
   const { data, error } = await supabase
     .from("AttendancePeriodConfig")
@@ -188,38 +208,60 @@ export async function updateAttendancePeriodConfig(
     console.error("updateAttendancePeriodConfig error:", error);
     throw error;
   }
-  return data
+  const result = data
     ? mapAttendancePeriodConfigRow(data as unknown as AttendancePeriodConfigRow)
     : null;
+  if (audit && result) {
+    await writeAuditLog({
+      ...audit,
+      action: "UPDATE",
+      entity: "AttendancePeriodConfig",
+      entityId: result.id,
+      oldValue: oldValue ?? undefined,
+      newValue: result,
+    });
+  } else if (!audit) {
+    warnMissingAudit("updateAttendancePeriodConfig");
+  }
+  return result;
 }
 
 export async function saveAttendancePeriodConfig(
   attendancePeriodConfig: SaveAttendancePeriodConfigInput,
+  audit?: AuditContext,
 ): Promise<AttendancePeriodConfig | null> {
   if (attendancePeriodConfig.id) {
-    return updateAttendancePeriodConfig({
-      id: attendancePeriodConfig.id,
+    return updateAttendancePeriodConfig(
+      {
+        id: attendancePeriodConfig.id,
+        name: attendancePeriodConfig.name,
+        startDate: attendancePeriodConfig.startDate,
+        endDate: attendancePeriodConfig.endDate,
+        semesterId: attendancePeriodConfig.semesterId,
+        type: attendancePeriodConfig.type,
+        isActive: attendancePeriodConfig.isActive,
+      },
+      audit,
+    );
+  }
+  return createAttendancePeriodConfig(
+    {
       name: attendancePeriodConfig.name,
       startDate: attendancePeriodConfig.startDate,
       endDate: attendancePeriodConfig.endDate,
       semesterId: attendancePeriodConfig.semesterId,
       type: attendancePeriodConfig.type,
       isActive: attendancePeriodConfig.isActive,
-    });
-  }
-  return createAttendancePeriodConfig({
-    name: attendancePeriodConfig.name,
-    startDate: attendancePeriodConfig.startDate,
-    endDate: attendancePeriodConfig.endDate,
-    semesterId: attendancePeriodConfig.semesterId,
-    type: attendancePeriodConfig.type,
-    isActive: attendancePeriodConfig.isActive,
-  });
+    },
+    audit,
+  );
 }
 
 export async function deleteAttendancePeriodConfig(
   id: string,
+  audit?: AuditContext,
 ): Promise<boolean> {
+  const oldValue = audit ? await getAttendancePeriodConfigById(id) : null;
   const supabase = createClient();
   const { error } = await supabase
     .from("AttendancePeriodConfig")
@@ -229,14 +271,29 @@ export async function deleteAttendancePeriodConfig(
     console.error("deleteAttendancePeriodConfig error:", error);
     return false;
   }
+  if (audit) {
+    await writeAuditLog({
+      ...audit,
+      action: "DELETE",
+      entity: "AttendancePeriodConfig",
+      entityId: id,
+      oldValue: oldValue ?? undefined,
+    });
+  } else {
+    warnMissingAudit("deleteAttendancePeriodConfig");
+  }
   return true;
 }
 
 export async function toggleAttendancePeriodConfigStatus(
   attendancePeriodConfig: AttendancePeriodConfig,
+  audit?: AuditContext,
 ): Promise<AttendancePeriodConfig | null> {
-  return updateAttendancePeriodConfig({
-    ...attendancePeriodConfig,
-    isActive: !attendancePeriodConfig.isActive,
-  });
+  return updateAttendancePeriodConfig(
+    {
+      ...attendancePeriodConfig,
+      isActive: !attendancePeriodConfig.isActive,
+    },
+    audit,
+  );
 }

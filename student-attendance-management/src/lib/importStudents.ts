@@ -1,3 +1,5 @@
+import type { ClassOption } from "@/lib/api/classes";
+
 const EMAIL_DOMAIN = "school.edu";
 
 export type RawImportRow = {
@@ -6,21 +8,34 @@ export type RawImportRow = {
   email: string;
   username: string;
   role: string;
+  class: string;
+  grade: string;
 };
 
 export type ImportPreviewRow = RawImportRow & {
   isEmailGenerated: boolean;
   isUsernameGenerated: boolean;
+  classId: string | null;
+  classResolveError: string | null;
 };
 
 const HEADER_MAP: Record<string, keyof RawImportRow> = {
   name: "name",
   "full name": "name",
   "họ tên": "name",
+  "holy name": "holy_name",
+  holy_name: "holy_name",
+  "tên thánh": "holy_name",
   email: "email",
   username: "username",
   "user name": "username",
   role: "role",
+  class: "class",
+  "class name": "class",
+  lớp: "class",
+  grade: "grade",
+  "grade name": "grade",
+  khối: "grade",
 };
 
 function normalizeHeaderKey(key: string): string {
@@ -40,6 +55,8 @@ export function parseRawImportRows(
       email: "",
       username: "",
       role: "student",
+      class: "",
+      grade: "",
     };
 
     for (const [key, value] of Object.entries(row)) {
@@ -72,10 +89,60 @@ export function validateImportNames(rows: RawImportRow[]): {
       email: row.email.trim().toLowerCase(),
       username: row.username.trim(),
       role: (row.role.trim().toLowerCase() || "student") as string,
+      class: row.class.trim(),
+      grade: row.grade.trim(),
     });
   });
 
   return { validRows, invalidRowNumbers };
+}
+
+/** Kiểm tra cột class/grade bắt buộc khi import Admin/Supervisor */
+export function validateImportClassGrade(rows: RawImportRow[]): {
+  validRows: RawImportRow[];
+  invalidRowNumbers: number[];
+} {
+  const validRows: RawImportRow[] = [];
+  const invalidRowNumbers: number[] = [];
+
+  rows.forEach((row, index) => {
+    if (!row.class.trim() || !row.grade.trim()) {
+      invalidRowNumbers.push(index + 2);
+      return;
+    }
+    validRows.push(row);
+  });
+
+  return { validRows, invalidRowNumbers };
+}
+
+/** Map tên lớp + khối sang classId từ danh sách Class đã load */
+export function resolveClassId(
+  className: string,
+  gradeName: string,
+  classes: ClassOption[],
+): { classId: string | null; error: string | null } {
+  const normalizedClass = className.trim().toLowerCase();
+  const normalizedGrade = gradeName.trim().toLowerCase();
+
+  if (!normalizedClass || !normalizedGrade) {
+    return { classId: null, error: "Class and Grade are required" };
+  }
+
+  const match = classes.find(
+    (item) =>
+      item.name.trim().toLowerCase() === normalizedClass &&
+      item.grade?.name.trim().toLowerCase() === normalizedGrade,
+  );
+
+  if (!match) {
+    return {
+      classId: null,
+      error: `Class "${className}" not found in Grade "${gradeName}"`,
+    };
+  }
+
+  return { classId: match.id, error: null };
 }
 
 function removeAccents(value: string): string {
@@ -149,6 +216,8 @@ export function buildImportPreviewRows(
   rows: RawImportRow[],
   existingEmails: string[] = [],
   existingUsernames: string[] = [],
+  classes: ClassOption[] = [],
+  resolveClass = false,
 ): ImportPreviewRow[] {
   const usedEmails = new Set(
     existingEmails.map((email) => email.toLowerCase()),
@@ -172,16 +241,70 @@ export function buildImportPreviewRows(
       usedEmails,
     );
 
+    let classId: string | null = null;
+    let classResolveError: string | null = null;
+
+    if (resolveClass) {
+      const resolved = resolveClassId(row.class, row.grade, classes);
+      classId = resolved.classId;
+      classResolveError = resolved.error;
+    }
+
     return {
       name: row.name,
       holy_name: row.holy_name,
       email,
       username,
       role: row.role || "student",
+      class: row.class,
+      grade: row.grade,
       isEmailGenerated: !hasEmail,
       isUsernameGenerated: !hasUsername,
+      classId,
+      classResolveError,
     };
   });
+}
+
+/** Template CSV mẫu cho Admin/Supervisor import */
+export function buildImportTemplateCsv(): string {
+  const headers = [
+    "holy_name",
+    "name",
+    "email",
+    "username",
+    "class",
+    "grade",
+  ];
+  const sampleRows = [
+    ["Maria", "Nguyễn Văn A", "", "", "10A1", "Grade 10"],
+    ["Joseph", "Trần Thị B", "tranthib@school.edu", "tranthib", "10A2", "Grade 10"],
+  ];
+
+  const escapeCell = (value: string) =>
+    value.includes(",") || value.includes('"')
+      ? `"${value.replace(/"/g, '""')}"`
+      : value;
+
+  const lines = [
+    headers.join(","),
+    ...sampleRows.map((row) => row.map(escapeCell).join(",")),
+  ];
+
+  return lines.join("\n");
+}
+
+export function downloadImportTemplate(): void {
+  const csv = buildImportTemplateCsv();
+  const blob = new Blob(["\ufeff" + csv], {
+    type: "text/csv;charset=utf-8;",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "student_import_template.csv";
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 export function generateQRCode(): string {

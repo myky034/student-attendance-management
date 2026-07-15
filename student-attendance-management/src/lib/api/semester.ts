@@ -1,5 +1,8 @@
 import { createClient } from "@/lib/supabase/client";
 import { format } from "date-fns";
+import { writeAuditLog } from "@/lib/audit/writeAuditLog";
+import { warnMissingAudit } from "@/lib/audit/warnMissingAudit";
+import type { AuditContext } from "@/lib/audit/types";
 
 type SemesterRow = {
   id: number | string;
@@ -154,29 +157,48 @@ export async function getSemesterGreaterThanCurrent(
 
 export async function createSemester(
   semester: CreateSemesterInput,
+  audit?: AuditContext,
 ): Promise<void> {
   const supabase = createClient();
-  const { error } = await supabase.from("Semester").insert({
-    name: semester.name,
-    code: semester.code,
-    start_date: semester.startDate,
-    end_date: semester.endDate,
-    sort_order: semester.sortOrder,
-    is_active: semester.isActive,
-    academic_year_id: semester.academicYearId
-      ? Number(semester.academicYearId)
-      : null,
-    update_at: new Date().toISOString(),
-  });
+  const { data, error } = await supabase
+    .from("Semester")
+    .insert({
+      name: semester.name,
+      code: semester.code,
+      start_date: semester.startDate,
+      end_date: semester.endDate,
+      sort_order: semester.sortOrder,
+      is_active: semester.isActive,
+      academic_year_id: semester.academicYearId
+        ? Number(semester.academicYearId)
+        : null,
+      update_at: new Date().toISOString(),
+    })
+    .select(semesterSelect)
+    .single();
   if (error) {
     console.error("createSemester error:", error);
     throw error;
+  }
+  if (audit && data) {
+    const result = mapSemesterRow(data as SemesterRow);
+    await writeAuditLog({
+      ...audit,
+      action: "CREATE",
+      entity: "Semester",
+      entityId: result.id,
+      newValue: result,
+    });
+  } else if (!audit) {
+    warnMissingAudit("createSemester");
   }
 }
 
 export async function updateSemester(
   semester: UpdateSemesterInput,
+  audit?: AuditContext,
 ): Promise<Semester> {
+  const oldValue = audit ? await getSemesterById(semester.id) : null;
   const supabase = createClient();
   const { data, error } = await supabase
     .from("Semester")
@@ -202,26 +224,51 @@ export async function updateSemester(
   if (!data) {
     throw new Error("Semester not found");
   }
-  return mapSemesterRow(data);
+  const result = mapSemesterRow(data);
+  if (audit) {
+    await writeAuditLog({
+      ...audit,
+      action: "UPDATE",
+      entity: "Semester",
+      entityId: result.id,
+      oldValue: oldValue ?? undefined,
+      newValue: result,
+    });
+  } else {
+    warnMissingAudit("updateSemester");
+  }
+  return result;
 }
 
 export async function saveSemester(
   semester: SaveSemesterInput,
+  audit?: AuditContext,
 ): Promise<Semester> {
   if (semester.id) {
     const existing = await getSemesterById(semester.id);
     if (!existing) {
       throw new Error("Semester not found");
     }
-    return updateSemester({
-      ...semester,
-      isActive: existing.isActive,
-    } as UpdateSemesterInput);
+    return updateSemester(
+      {
+        ...semester,
+        isActive: existing.isActive,
+      } as UpdateSemesterInput,
+      audit,
+    );
   }
-  return createSemester(semester as CreateSemesterInput) as unknown as Semester;
+  await createSemester(semester as CreateSemesterInput, audit);
+  const semesters = await getSemesters();
+  const created = semesters[semesters.length - 1];
+  if (!created) throw new Error("Semester creation failed");
+  return created;
 }
 
-export async function deleteSemester(id: string): Promise<void> {
+export async function deleteSemester(
+  id: string,
+  audit?: AuditContext,
+): Promise<void> {
+  const oldValue = audit ? await getSemesterById(id) : null;
   const supabase = createClient();
   const { error } = await supabase
     .from("Semester")
@@ -231,13 +278,28 @@ export async function deleteSemester(id: string): Promise<void> {
     console.error("deleteSemester error:", error);
     throw error;
   }
+  if (audit) {
+    await writeAuditLog({
+      ...audit,
+      action: "DELETE",
+      entity: "Semester",
+      entityId: id,
+      oldValue: oldValue ?? undefined,
+    });
+  } else {
+    warnMissingAudit("deleteSemester");
+  }
 }
 
 export async function toggleSemesterStatus(
   semester: UpdateSemesterInput,
+  audit?: AuditContext,
 ): Promise<Semester> {
-  return updateSemester({
-    ...semester,
-    isActive: !semester.isActive,
-  } as UpdateSemesterInput);
+  return updateSemester(
+    {
+      ...semester,
+      isActive: !semester.isActive,
+    } as UpdateSemesterInput,
+    audit,
+  );
 }

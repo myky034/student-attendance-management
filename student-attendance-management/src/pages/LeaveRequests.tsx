@@ -32,6 +32,7 @@ import {
 import { getVietnamTimestampString } from "@/lib/datetime";
 import { toast } from "sonner";
 import { useAppContext } from "@/context/useAppContext";
+import { useAuditContext } from "@/hooks/useAuditContext";
 import {
   Check,
   X,
@@ -133,6 +134,7 @@ export function LeaveRequests() {
     rejected_reason: "",
   });
   const { user } = useAppContext();
+  const audit = useAuditContext();
   const [open, setOpen] = useState(false);
   const [openRejectDialog, setOpenRejectDialog] = useState(false);
   const [selectedLeaveRequest, setSelectedLeaveRequest] =
@@ -229,12 +231,15 @@ export function LeaveRequests() {
     }
     setLoading(true);
     try {
-      await rejectLeaveRequest({
-        id: selectedLeaveRequest.id,
-        rejected_reason: selectedLeaveRequest.rejected_reason,
-        rejected_at: new Date().toISOString(),
-        status: "rejected",
-      });
+      await rejectLeaveRequest(
+        {
+          id: selectedLeaveRequest.id,
+          rejected_reason: selectedLeaveRequest.rejected_reason,
+          rejected_at: new Date().toISOString(),
+          status: "rejected",
+        },
+        audit ?? undefined,
+      );
       toast.success("Leave request rejected successfully");
       await loadLeaveRequests();
       handleCloseRejectDialog();
@@ -262,23 +267,29 @@ export function LeaveRequests() {
         return;
       }
 
-      await saveAttendanceRecord({
-        studentId: leaveRequest.student_id,
-        date: attendanceDate,
-        status: "excused_absence",
-        timestamp: getVietnamTimestampString(),
-        createdById: user.id,
-        leaveRequestId: leaveRequest.id,
-        classId,
-        semesterId,
-      });
+      await saveAttendanceRecord(
+        {
+          studentId: leaveRequest.student_id,
+          date: attendanceDate,
+          status: "excused_absence",
+          timestamp: getVietnamTimestampString(),
+          createdById: user.id,
+          leaveRequestId: leaveRequest.id,
+          classId,
+          semesterId,
+        },
+        audit ?? undefined,
+      );
 
-      await approveLeaveRequest({
-        id: leaveRequest.id,
-        approved_by_id: user.id,
-        approved_at: new Date().toISOString(),
-        status: "approved",
-      });
+      await approveLeaveRequest(
+        {
+          id: leaveRequest.id,
+          approved_by_id: user.id,
+          approved_at: new Date().toISOString(),
+          status: "approved",
+        },
+        audit ?? undefined,
+      );
 
       toast.success("Leave request approved successfully");
       await loadLeaveRequests();
@@ -322,8 +333,80 @@ export function LeaveRequests() {
             <div className="flex justify-center items-center h-full">
               <Loader2 className="w-4 h-4 animate-spin" />
             </div>
-          ) : (
-            <Table>
+          ) : leaveRequests.length > 0 ? (
+            <>
+              <div className="flex flex-col gap-3 md:hidden">
+                {leaveRequests.map((leaveRequest, index) => (
+                  <div
+                    key={leaveRequest.id}
+                    className="rounded-lg border border-zinc-200 bg-card p-4 shadow-sm dark:border-zinc-800"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="font-semibold text-base">
+                          {leaveRequest.student.name}
+                        </p>
+                        <p className="text-xs text-muted-foreground">#{index + 1}</p>
+                      </div>
+                      <Badge variant={getLeaveStatusVariant(leaveRequest.status)}>
+                        {formatLeaveStatus(leaveRequest.status)}
+                      </Badge>
+                    </div>
+                    <div className="mt-2 space-y-1 text-sm text-muted-foreground">
+                      <p>
+                        <span className="font-medium text-zinc-700 dark:text-zinc-300">Mã HS:</span>{" "}
+                        {leaveRequest.student.code}
+                      </p>
+                      <p>
+                        <span className="font-medium text-zinc-700 dark:text-zinc-300">Lớp:</span>{" "}
+                        {leaveRequest.student.class?.name ?? "—"}
+                      </p>
+                      <p>
+                        <span className="font-medium text-zinc-700 dark:text-zinc-300">Người gửi:</span>{" "}
+                        {leaveRequest.submitted_by_name}
+                      </p>
+                      <p>
+                        <span className="font-medium text-zinc-700 dark:text-zinc-300">Ngày nghỉ:</span>{" "}
+                        {new Date(leaveRequest.request_date).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1"
+                        onClick={() => handleOpenLeaveRequestDetails(leaveRequest)}
+                      >
+                        <Eye size={16} className="mr-1.5" />
+                        Chi tiết
+                      </Button>
+                      {leaveRequest.status.toLowerCase() === "pending" && (
+                        <>
+                          <Button
+                            variant="success"
+                            size="sm"
+                            className="flex-1"
+                            onClick={() => handleApproveLeaveRequest(leaveRequest)}
+                          >
+                            <Check size={16} className="mr-1.5" />
+                            Duyệt
+                          </Button>
+                          <Button
+                            variant="danger"
+                            size="sm"
+                            className="flex-1"
+                            onClick={() => handleOpenRejectDialog(leaveRequest)}
+                          >
+                            <X size={16} className="mr-1.5" />
+                            Từ chối
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <Table className="hidden md:table">
               <TableHeader>
                 <TableRow>
                   <TableHead>No.</TableHead>
@@ -333,80 +416,79 @@ export function LeaveRequests() {
                   <TableHead>Submitted By</TableHead>
                   <TableHead>Requested Date</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Actions</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {leaveRequests.length > 0 ? (
-                  leaveRequests.map((leaveRequest, index) => (
-                    <TableRow key={leaveRequest.id}>
-                      <TableCell>{index + 1}</TableCell>
-                      <TableCell>{leaveRequest.student.name}</TableCell>
-                      <TableCell>{leaveRequest.student.code}</TableCell>
-                      <TableCell>{leaveRequest.student.class?.name}</TableCell>
-                      <TableCell>{leaveRequest.submitted_by_name}</TableCell>
-                      <TableCell>
-                        {new Date(
-                          leaveRequest.request_date,
-                        ).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={getLeaveStatusVariant(leaveRequest.status)}
+                {leaveRequests.map((leaveRequest, index) => (
+                  <TableRow key={leaveRequest.id}>
+                    <TableCell>{index + 1}</TableCell>
+                    <TableCell className="max-w-[140px] truncate font-medium" title={leaveRequest.student.name}>
+                      {leaveRequest.student.name}
+                    </TableCell>
+                    <TableCell>{leaveRequest.student.code}</TableCell>
+                    <TableCell>{leaveRequest.student.class?.name}</TableCell>
+                    <TableCell className="max-w-[120px] truncate" title={leaveRequest.submitted_by_name}>
+                      {leaveRequest.submitted_by_name}
+                    </TableCell>
+                    <TableCell>
+                      {new Date(
+                        leaveRequest.request_date,
+                      ).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={getLeaveStatusVariant(leaveRequest.status)}
+                      >
+                        {formatLeaveStatus(leaveRequest.status)}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="whitespace-normal text-right">
+                      <div className="flex flex-wrap items-center justify-end gap-1">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            handleOpenLeaveRequestDetails(leaveRequest)
+                          }
                         >
-                          {formatLeaveStatus(leaveRequest.status)}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="mr-2"
-                            onClick={() =>
-                              handleOpenLeaveRequestDetails(leaveRequest)
-                            }
-                          >
-                            <Eye size={16} />
-                          </Button>
-                          {leaveRequest.status.toLowerCase() === "pending" && (
-                            <div className="flex items-center gap-2">
-                              <Button
-                                variant="success"
-                                size="sm"
-                                className="mr-2"
-                                onClick={() =>
-                                  handleApproveLeaveRequest(leaveRequest)
-                                }
-                              >
-                                <Check size={16} />
-                              </Button>
-                              <Button
-                                variant="danger"
-                                size="sm"
-                                onClick={() =>
-                                  handleOpenRejectDialog(leaveRequest)
-                                }
-                              >
-                                <X size={16} />
-                              </Button>
-                            </div>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8">
-                      <Typography variant="body1" fontWeight={400} color="gray">
-                        No leave requests found for your class
-                      </Typography>
+                          <Eye size={16} />
+                        </Button>
+                        {leaveRequest.status.toLowerCase() === "pending" && (
+                          <>
+                            <Button
+                              variant="success"
+                              size="sm"
+                              onClick={() =>
+                                handleApproveLeaveRequest(leaveRequest)
+                              }
+                            >
+                              <Check size={16} />
+                            </Button>
+                            <Button
+                              variant="danger"
+                              size="sm"
+                              onClick={() =>
+                                handleOpenRejectDialog(leaveRequest)
+                              }
+                            >
+                              <X size={16} />
+                            </Button>
+                          </>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
-                )}
+                ))}
               </TableBody>
             </Table>
+            </>
+          ) : (
+            <div className="py-8 text-center">
+              <Typography variant="body1" fontWeight={400} color="gray">
+                No leave requests found for your class
+              </Typography>
+            </div>
           )}
         </CardContent>
       </Card>

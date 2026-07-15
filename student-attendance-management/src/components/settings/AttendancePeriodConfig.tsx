@@ -54,6 +54,7 @@ import { getAcademicYears, type AcademicYear } from "@/lib/api/academicyear";
 import { motion } from "motion/react";
 import { Label } from "@radix-ui/react-label";
 import { toast } from "sonner";
+import { useAuditContext } from "@/hooks/useAuditContext";
 import {
   Select,
   SelectTrigger,
@@ -93,6 +94,7 @@ function toDateOnly(value: string): string {
 }
 
 export function AttendancePeriodConfig() {
+  const audit = useAuditContext();
   const [attendancePeriodConfigs, setAttendancePeriodConfigs] = useState<
     AttendancePeriodConfig[]
   >([]);
@@ -219,15 +221,18 @@ export function AttendancePeriodConfig() {
       return;
     }
     try {
-      await saveAttendancePeriodConfig({
-        ...(isEditMode && formData.id ? { id: formData.id } : {}),
-        name: formData.name.trim(),
-        startDate: formData.startDate,
-        endDate: formData.endDate,
-        semesterId: formData.semesterId,
-        type: formData.type,
-        isActive: formData.isActive,
-      });
+      await saveAttendancePeriodConfig(
+        {
+          ...(isEditMode && formData.id ? { id: formData.id } : {}),
+          name: formData.name.trim(),
+          startDate: formData.startDate,
+          endDate: formData.endDate,
+          semesterId: formData.semesterId,
+          type: formData.type,
+          isActive: formData.isActive,
+        },
+        audit ?? undefined,
+      );
       await loadAttendancePeriodConfigs();
       toast.success("Attendance period config saved successfully");
       handleClose();
@@ -256,7 +261,10 @@ export function AttendancePeriodConfig() {
     attendancePeriodConfig: AttendancePeriodConfig,
   ) => {
     try {
-      await deleteAttendancePeriodConfig(attendancePeriodConfig.id);
+      await deleteAttendancePeriodConfig(
+        attendancePeriodConfig.id,
+        audit ?? undefined,
+      );
       await loadAttendancePeriodConfigs();
       toast.success("Attendance period config deleted successfully");
     } catch (error) {
@@ -269,7 +277,10 @@ export function AttendancePeriodConfig() {
     attendancePeriodConfig: AttendancePeriodConfig,
   ) => {
     try {
-      await toggleAttendancePeriodConfigStatus(attendancePeriodConfig);
+      await toggleAttendancePeriodConfigStatus(
+        attendancePeriodConfig,
+        audit ?? undefined,
+      );
       await loadAttendancePeriodConfigs();
       toast.success("Attendance period config status toggled successfully");
     } catch (error) {
@@ -287,7 +298,7 @@ export function AttendancePeriodConfig() {
       >
         <Card>
           <CardHeader>
-            <div className="flex justify-between items-center">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               {!showForm && (
                 <>
                   <div>
@@ -471,40 +482,89 @@ export function AttendancePeriodConfig() {
             </Collapse>
           </CardHeader>
           <CardContent>
-            <Table>
+            {isLoading ? (
+              <div className="flex flex-col items-center gap-2 py-8">
+                <Loader2 className="w-4 h-4 animate-spin text-zinc-500" />
+                <span className="text-zinc-500">Loading...</span>
+              </div>
+            ) : attendancePeriodConfigs.length === 0 ? (
+              <p className="py-8 text-center text-sm text-gray-500">
+                No attendance period configs found.
+              </p>
+            ) : (
+              <>
+                <div className="flex flex-col gap-3 md:hidden">
+                  {attendancePeriodConfigs.map((config, index) => (
+                    <div
+                      key={config.id}
+                      className="rounded-lg border border-zinc-200 bg-card p-4 shadow-sm dark:border-zinc-800"
+                    >
+                      <p className="font-semibold text-base">{config.name}</p>
+                      <div className="mt-2 space-y-1 text-sm text-muted-foreground">
+                        <p><span className="font-medium text-zinc-700 dark:text-zinc-300">No:</span> {index + 1}</p>
+                        <p><span className="font-medium text-zinc-700 dark:text-zinc-300">Start:</span> {config.startDate}</p>
+                        <p><span className="font-medium text-zinc-700 dark:text-zinc-300">End:</span> {config.endDate}</p>
+                        <p><span className="font-medium text-zinc-700 dark:text-zinc-300">Semester:</span> {semesters.find((s) => s.id === config.semesterId)?.name}</p>
+                        <p><span className="font-medium text-zinc-700 dark:text-zinc-300">Type:</span> {toUiPeriodType(config.type)}</p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-medium text-zinc-700 dark:text-zinc-300">Status:</span>
+                          {config.isActive ? <Badge variant="success">Active</Badge> : <Badge variant="danger">Inactive</Badge>}
+                        </div>
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Button variant="outline" size="sm" className="flex-1" onClick={() => handleEdit(config)}><Edit size={16} className="mr-1.5" />Edit</Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild><Button variant="outline" size="sm"><Trash size={16} /></Button></AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader><AlertDialogTitle>Delete Attendance Period Config</AlertDialogTitle></AlertDialogHeader>
+                            <AlertDialogDescription>Are you sure you want to delete this attendance period config?<br />This action cannot be undone.</AlertDialogDescription>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => handleDelete(config)}>Delete</AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild><Button variant="outline" size="sm">{config.isActive ? <PowerOff size={16} /> : <Power size={16} />}</Button></AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader><AlertDialogTitle>Toggle Attendance Period Config Status</AlertDialogTitle></AlertDialogHeader>
+                            <AlertDialogDescription>Are you sure you want to toggle the status of this attendance period config?</AlertDialogDescription>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => handleToggleStatus(config)}>{config.isActive ? "Deactivate" : "Activate"}</AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <Table className="hidden md:table">
               <TableHeader>
                 <TableRow>
-                  <TableHead>No</TableHead>
+                  <TableHead className="w-10">No</TableHead>
                   <TableHead>Name</TableHead>
                   <TableHead>Start Date</TableHead>
                   <TableHead>End Date</TableHead>
                   <TableHead>Semester</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Actions</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {isLoading ? (
-                  <TableRow>
-                    <TableCell colSpan={9} className="text-center py-4">
-                      <div className="flex justify-center items-center">
-                        <Loader2 className="w-4 h-4 animate-spin text-zinc-500" />
-                      </div>
-                      <span className="text-zinc-500">Loading...</span>
-                    </TableCell>
-                  </TableRow>
-                ) : attendancePeriodConfigs.length > 0 ? (
-                  attendancePeriodConfigs.map(
+                  {attendancePeriodConfigs.map(
                     (attendancePeriodConfig, index) => (
                       <TableRow key={attendancePeriodConfig.id}>
                         <TableCell>{index + 1}</TableCell>
-                        <TableCell>{attendancePeriodConfig.name}</TableCell>
+                        <TableCell className="max-w-[140px] truncate font-medium" title={attendancePeriodConfig.name}>
+                          {attendancePeriodConfig.name}
+                        </TableCell>
                         <TableCell>
                           {attendancePeriodConfig.startDate}
                         </TableCell>
                         <TableCell>{attendancePeriodConfig.endDate}</TableCell>
-                        <TableCell>
+                        <TableCell className="max-w-[120px] truncate">
                           {
                             semesters.find(
                               (semester) =>
@@ -527,13 +587,8 @@ export function AttendancePeriodConfig() {
                             </Badge>
                           )}
                         </TableCell>
-                        <TableCell>
-                          {toDateOnly(attendancePeriodConfig.createdAt)}
-                        </TableCell>
-                        <TableCell>
-                          {toDateOnly(attendancePeriodConfig.updatedAt)}
-                        </TableCell>
-                        <TableCell>
+                        <TableCell className="whitespace-normal text-right">
+                          <div className="flex flex-wrap items-center justify-end gap-1">
                           <Button
                             variant="ghost"
                             size="icon"
@@ -609,21 +664,15 @@ export function AttendancePeriodConfig() {
                               </AlertDialogFooter>
                             </AlertDialogContent>
                           </AlertDialog>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ),
-                  )
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={8} className="text-center py-4 h-24">
-                      <p className="text-center text-sm text-gray-500">
-                        No attendance period configs found.
-                      </p>
-                    </TableCell>
-                  </TableRow>
-                )}
+                  )}
               </TableBody>
             </Table>
+              </>
+            )}
           </CardContent>
         </Card>
       </MotionBox>

@@ -42,6 +42,42 @@ export function getVietnamTimestampString(date = new Date()): string {
   return `${partValue(parts, "year")}-${partValue(parts, "month")}-${partValue(parts, "day")}T${hour}:${partValue(parts, "minute").padStart(2, "0")}:${partValue(parts, "second").padStart(2, "0")}`;
 }
 
+const HAS_TIMEZONE_SUFFIX = /(?:[Zz]|[+-]\d{2}(?::?\d{2})?)$/;
+
+/**
+ * Parse timestamp UTC từ Postgres/Supabase (TIMESTAMP WITHOUT TIME ZONE).
+ * Chuỗi ISO không có suffix Z/offset được hiểu là UTC, không phải local browser.
+ */
+export function parseUtcTimestamp(value: string): Date {
+  if (!value) return new Date(Number.NaN);
+
+  let normalized = value.trim().replace(" ", "T");
+  if (!HAS_TIMEZONE_SUFFIX.test(normalized)) {
+    normalized = `${normalized}Z`;
+  }
+
+  return new Date(normalized);
+}
+
+/** Hiển thị ngày giờ đầy đủ theo múi giờ Việt Nam */
+export function formatVietnamDateTime(value?: string | null): string {
+  if (!value) return "—";
+
+  const date = parseUtcTimestamp(value);
+  if (Number.isNaN(date.getTime())) return "—";
+
+  return new Intl.DateTimeFormat("vi-VN", {
+    timeZone: APP_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).format(date);
+}
+
 /** Hiển thị HH:mm:ss từ giá trị đã lưu */
 export function formatVietnamTime(value: string): string {
   if (!value || value === "-") return value;

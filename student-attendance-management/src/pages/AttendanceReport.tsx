@@ -564,8 +564,8 @@ function AttendanceMatrixReport({
       </CardHeader>
 
       <CardContent className="space-y-4">
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
-          <div className="relative max-w-sm flex-1">
+        <div className="flex flex-col gap-3 w-full md:flex-row md:flex-wrap md:items-end md:gap-4">
+          <div className="relative w-full min-w-0 md:max-w-sm md:flex-1">
             <Search
               size={16}
               className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400"
@@ -579,15 +579,15 @@ function AttendanceMatrixReport({
             />
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-col gap-3 w-full min-w-0 md:flex-row md:flex-wrap md:items-end md:gap-2 md:w-auto">
             {filterMode === "semester" ? (
               <>
-                <div className="flex items-center gap-2">
-                  <CalendarDays size={16} className="text-zinc-400" />
+                <div className="flex w-full min-w-0 items-center gap-2 md:w-auto">
+                  <CalendarDays size={16} className="shrink-0 text-zinc-400" />
                   <select
                     value={selectedAcademicYearId}
                     onChange={(e) => onAcademicYearChange?.(e.target.value)}
-                    className={selectClassName}
+                    className={`${selectClassName} w-full min-w-0`}
                     aria-label="Academic year"
                     disabled={academicYearsList.length === 0}
                   >
@@ -606,7 +606,7 @@ function AttendanceMatrixReport({
                 <select
                   value={selectedSemester?.id ?? ""}
                   onChange={(e) => onSemesterChange?.(e.target.value)}
-                  className={selectClassName}
+                  className={`${selectClassName} w-full min-w-0 md:w-auto`}
                   aria-label="Semester"
                   disabled={availableSemesters.length === 0}
                 >
@@ -622,12 +622,12 @@ function AttendanceMatrixReport({
                 </select>
               </>
             ) : (
-              <div className="flex items-center gap-2">
-                <CalendarDays size={16} className="text-zinc-400" />
+              <div className="flex w-full min-w-0 items-center gap-2 md:w-auto">
+                <CalendarDays size={16} className="shrink-0 text-zinc-400" />
                 <select
                   value={selectedMonth}
                   onChange={(e) => onMonthChange?.(e.target.value)}
-                  className={selectClassName}
+                  className={`${selectClassName} w-full min-w-0`}
                   aria-label="Month"
                   disabled={availableMonths.length === 0}
                 >
@@ -647,7 +647,7 @@ function AttendanceMatrixReport({
             <select
               value={rowsPerPage}
               onChange={(e) => onRowsPerPageChange(Number(e.target.value))}
-              className={selectClassName}
+              className={`${selectClassName} w-full min-w-0 md:w-auto`}
               aria-label="Rows per page"
             >
               {ROWS_PER_PAGE_OPTIONS.map((size) => (
@@ -706,7 +706,92 @@ function AttendanceMatrixReport({
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto max-w-full">
+          <>
+            {/* Mobile: card mỗi học sinh với session status dạng badge dọc */}
+            <div
+              className={`flex flex-col gap-3 md:hidden ${attendanceLoading ? "opacity-60" : ""}`}
+            >
+              {paginatedData.map((student) => (
+                <div
+                  key={student.qrCode ?? student.id}
+                  className="rounded-lg border border-zinc-200 bg-card p-4 shadow-sm dark:border-zinc-800"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-semibold text-base">
+                        #{student.globalIndex} {student.name}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {student.qrCode ?? student.id}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 gap-1">
+                      <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 dark:bg-emerald-950 dark:text-emerald-200">
+                        P {student.totalP}
+                      </Badge>
+                      <Badge className="bg-red-100 text-red-800 hover:bg-red-100 dark:bg-red-950 dark:text-red-200">
+                        V {student.totalV}
+                      </Badge>
+                      <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100 dark:bg-amber-950 dark:text-amber-200">
+                        E {student.totalE}
+                      </Badge>
+                    </div>
+                  </div>
+                  {sessionDays.length > 0 && (
+                    <div className="mt-3 max-h-48 space-y-1.5 overflow-y-auto">
+                      {sessionDays.map((day) => {
+                        const mark = student.attendanceMap[day] ?? "";
+                        const markStyle = getCellStyles(mark);
+                        return (
+                          <div
+                            key={day}
+                            className="flex items-center justify-between gap-2 rounded-md border border-zinc-100 bg-zinc-50 px-2.5 py-1.5 text-sm dark:border-zinc-800 dark:bg-zinc-900/50"
+                          >
+                            <span className="font-medium text-zinc-700 dark:text-zinc-300">
+                              {formatHeaderDate(day)}
+                            </span>
+                            {splitSessions ? (
+                              <div className="flex gap-1">
+                                <span
+                                  className="inline-flex min-w-[2rem] items-center justify-center rounded px-1.5 py-0.5 text-xs font-bold"
+                                  style={{
+                                    color: markStyle.color,
+                                    backgroundColor: markStyle.bgcolor,
+                                  }}
+                                >
+                                  TL {mark || "—"}
+                                </span>
+                                <span
+                                  className="inline-flex min-w-[2rem] items-center justify-center rounded px-1.5 py-0.5 text-xs font-bold"
+                                  style={{
+                                    color: markStyle.color,
+                                    backgroundColor: markStyle.bgcolor,
+                                  }}
+                                >
+                                  GL {mark || "—"}
+                                </span>
+                              </div>
+                            ) : (
+                              <span
+                                className="inline-flex min-w-[2rem] items-center justify-center rounded px-2 py-0.5 text-xs font-bold"
+                                style={{
+                                  color: markStyle.color,
+                                  backgroundColor: markStyle.bgcolor,
+                                }}
+                              >
+                                {mark || "—"}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <div className="hidden max-w-full overflow-x-auto md:block">
             <TableContainer
               component={Paper}
               sx={{
@@ -996,8 +1081,9 @@ function AttendanceMatrixReport({
                 </TableBody>
               </Table>
             </TableContainer>
+            </div>
 
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mt-4">
+            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm text-zinc-500 dark:text-zinc-400">
                 Display{" "}
                 {matrixData.length === 0
@@ -1012,7 +1098,7 @@ function AttendanceMatrixReport({
                 onPageChange={setPage}
               />
             </div>
-          </div>
+          </>
         )}
       </CardContent>
     </Card>
@@ -1520,7 +1606,7 @@ export function AttendanceReport() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <div className="mb-2 flex flex-wrap items-center gap-3">
-            <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
               Attendance Report
             </h1>
             {user && (
@@ -1560,7 +1646,7 @@ export function AttendanceReport() {
         className="w-full"
       >
         <TabsList
-          className={`grid w-full max-w-md ${isSpecialClass ? "grid-cols-2" : "grid-cols-1"}`}
+          className={`grid w-full max-w-md ${isSpecialClass ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1"}`}
         >
           <TabsTrigger value="sunday" className="flex items-center gap-2">
             Sunday Attendance

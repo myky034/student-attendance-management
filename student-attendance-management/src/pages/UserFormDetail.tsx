@@ -242,9 +242,9 @@ export function UserFormDetail() {
           Back to Dashboard
         </Button>
 
-        <div className="flex justify-between items-start mb-6">
+        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
               Student Details
             </h1>
             <p className="text-zinc-500 dark:text-zinc-400 mt-1">
@@ -432,7 +432,7 @@ export function UserFormDetail() {
                 <p className="text-sm text-emerald-700 dark:text-emerald-300">
                   Present (P)
                 </p>
-                <p className="text-3xl font-bold text-emerald-900 dark:text-emerald-100 mt-1">
+                <p className="text-2xl sm:text-3xl font-bold text-emerald-900 dark:text-emerald-100 mt-1">
                   {attendanceStats.present}
                 </p>
               </div>
@@ -441,7 +441,7 @@ export function UserFormDetail() {
                 <p className="text-sm text-red-700 dark:text-red-300">
                   Absent (V)
                 </p>
-                <p className="text-3xl font-bold text-red-900 dark:text-red-100 mt-1">
+                <p className="text-2xl sm:text-3xl font-bold text-red-900 dark:text-red-100 mt-1">
                   {attendanceStats.absent}
                 </p>
               </div>
@@ -450,7 +450,7 @@ export function UserFormDetail() {
                 <p className="text-sm text-amber-700 dark:text-amber-300">
                   Excused Absence (E)
                 </p>
-                <p className="text-3xl font-bold text-amber-900 dark:text-amber-100 mt-1">
+                <p className="text-2xl sm:text-3xl font-bold text-amber-900 dark:text-amber-100 mt-1">
                   {attendanceStats.excused}
                 </p>
               </div>

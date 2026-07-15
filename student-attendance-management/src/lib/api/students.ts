@@ -1,4 +1,10 @@
 import { createClient } from "@/lib/supabase/client";
+import { writeAuditLog, writeAuditLogSafe } from "@/lib/audit/writeAuditLog";
+import {
+  normalizeClassIdForAudit,
+  warnMissingAudit,
+} from "@/lib/audit/warnMissingAudit";
+import type { AuditContext } from "@/lib/audit/types";
 
 type CreateStudentInput = {
   name: string;
@@ -340,6 +346,7 @@ export async function getStudentsForAttendance(
 
 export async function createStudent(
   student: CreateStudentInput,
+  audit?: AuditContext,
 ): Promise<StudentRecord> {
   const supabase = createClient();
   const { data, error } = await supabase
@@ -368,12 +375,27 @@ export async function createStudent(
     throw error;
   }
 
-  return mapStudentRow(data as unknown as StudentRow);
+  const result = mapStudentRow(data as unknown as StudentRow);
+  if (audit) {
+    await writeAuditLog({
+      ...audit,
+      action: "CREATE",
+      entity: "User",
+      entityId: result.id,
+      classId: normalizeClassIdForAudit(result.classId),
+      newValue: result,
+    });
+  } else {
+    warnMissingAudit("createStudent");
+  }
+  return result;
 }
 
 export async function updateStudent(
   student: UpdateStudentInput,
+  audit?: AuditContext,
 ): Promise<StudentRecord> {
+  const oldValue = audit ? await getStudentById(student.id) : null;
   const supabase = createClient();
   const payload: Record<string, string | boolean> = {
     name: student.name,
@@ -403,27 +425,45 @@ export async function updateStudent(
     throw error;
   }
 
-  return mapStudentRow(data as unknown as StudentRow);
+  const result = mapStudentRow(data as unknown as StudentRow);
+  if (audit) {
+    await writeAuditLog({
+      ...audit,
+      action: "UPDATE",
+      entity: "User",
+      entityId: result.id,
+      classId: normalizeClassIdForAudit(result.classId),
+      oldValue: oldValue ?? undefined,
+      newValue: result,
+    });
+  } else {
+    warnMissingAudit("updateStudent");
+  }
+  return result;
 }
 
 export async function saveStudent(
   input: SaveStudentInput,
+  audit?: AuditContext,
 ): Promise<StudentRecord> {
   if (input.id) {
     const existing = await getStudentById(input.id);
     if (existing) {
-      return updateStudent({
-        id: input.id,
-        name: input.name,
-        holy_name: input.holy_name,
-        email: input.email,
-        username: input.username,
-        password: input.password,
-        qrCode: input.qrCode,
-        classId: input.classId,
-        isActive: input.isActive,
-        isLocked: input.isLocked,
-      });
+      return updateStudent(
+        {
+          id: input.id,
+          name: input.name,
+          holy_name: input.holy_name,
+          email: input.email,
+          username: input.username,
+          password: input.password,
+          qrCode: input.qrCode,
+          classId: input.classId,
+          isActive: input.isActive,
+          isLocked: input.isLocked,
+        },
+        audit,
+      );
     }
   }
 
@@ -435,17 +475,20 @@ export async function saveStudent(
       ),
     ).join("");
 
-  return createStudent({
-    name: input.name,
-    holy_name: input.holy_name,
-    email: input.email,
-    username: input.username,
-    password,
-    qrCode: input.qrCode,
-    classId: input.classId,
-    isActive: input.isActive,
-    isLocked: input.isLocked,
-  } as CreateStudentInput);
+  return createStudent(
+    {
+      name: input.name,
+      holy_name: input.holy_name,
+      email: input.email,
+      username: input.username,
+      password,
+      qrCode: input.qrCode,
+      classId: input.classId,
+      isActive: input.isActive,
+      isLocked: input.isLocked,
+    } as CreateStudentInput,
+    audit,
+  );
 }
 
 /** @deprecated Use saveStudent for single-student upsert */
@@ -486,11 +529,12 @@ export const CreateStudent = createStudent;
 
 export async function importStudents(
   students: CreateStudentInput[],
+  audit?: AuditContext,
 ): Promise<StudentRecord[]> {
   const results: StudentRecord[] = [];
 
   for (const student of students) {
-    results.push(await createStudent(student));
+    results.push(await createStudent(student, audit));
   }
 
   return results;
@@ -501,7 +545,11 @@ export async function importStudents(
  * @param id - The ID of the student to delete
  * @returns The deleted student
  */
-export async function deleteStudentById(id: string): Promise<StudentRecord> {
+export async function deleteStudentById(
+  id: string,
+  audit?: AuditContext,
+): Promise<StudentRecord> {
+  const oldValue = audit ? await getStudentById(id) : null;
   const supabase = createClient();
   const payload: Record<string, string | boolean> = {
     isDeleted: true.toString(),
@@ -522,13 +570,30 @@ export async function deleteStudentById(id: string): Promise<StudentRecord> {
     throw error;
   }
 
-  return mapStudentRow(data as unknown as StudentRow);
+  const result = mapStudentRow(data as unknown as StudentRow);
+  if (audit) {
+    await writeAuditLog({
+      ...audit,
+      action: "DELETE",
+      entity: "User",
+      entityId: result.id,
+      classId: normalizeClassIdForAudit(result.classId),
+      oldValue: oldValue ?? undefined,
+      newValue: result,
+    });
+  } else {
+    warnMissingAudit("deleteStudentById");
+  }
+  return result;
 }
 
 async function patchStudentFlags(
   id: string,
   flags: Partial<Pick<StudentRow, "isActive" | "isLocked" | "isDeleted">>,
+  audit?: AuditContext,
+  auditAction?: "LOCK" | "ACTIVATE",
 ): Promise<StudentRecord> {
+  const oldValue = audit ? await getStudentById(id) : null;
   const supabase = createClient();
   const payload: Record<string, string | boolean> = {
     ...flags,
@@ -547,19 +612,44 @@ async function patchStudentFlags(
     throw error;
   }
 
-  return mapStudentRow(data as unknown as StudentRow);
+  const result = mapStudentRow(data as unknown as StudentRow);
+  if (audit && auditAction) {
+    await writeAuditLog({
+      ...audit,
+      action: auditAction,
+      entity: "User",
+      entityId: result.id,
+      classId: normalizeClassIdForAudit(result.classId),
+      oldValue: oldValue ?? undefined,
+      newValue: result,
+    });
+  } else if (!audit) {
+    warnMissingAudit("patchStudentFlags");
+  }
+  return result;
 }
 
 export async function deactivateStudentById(
   id: string,
+  audit?: AuditContext,
 ): Promise<StudentRecord> {
   const existing = await getStudentById(id);
-  return patchStudentFlags(id, { isActive: !existing.isActive });
+  if (!existing) throw new Error("Student not found");
+  return patchStudentFlags(
+    id,
+    { isActive: !existing.isActive },
+    audit,
+    "ACTIVATE",
+  );
 }
 
-export async function lockStudentById(id: string): Promise<StudentRecord> {
+export async function lockStudentById(
+  id: string,
+  audit?: AuditContext,
+): Promise<StudentRecord> {
   const existing = await getStudentById(id);
-  return patchStudentFlags(id, { isLocked: !existing.isLocked });
+  if (!existing) throw new Error("Student not found");
+  return patchStudentFlags(id, { isLocked: !existing.isLocked }, audit, "LOCK");
 }
 
 async function fetchStudentAttendanceByStudentId(

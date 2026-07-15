@@ -1,4 +1,10 @@
 import { createClient } from "@/lib/supabase/client";
+import { writeAuditLog, writeAuditLogSafe } from "@/lib/audit/writeAuditLog";
+import {
+  normalizeClassIdForAudit,
+  warnMissingAudit,
+} from "@/lib/audit/warnMissingAudit";
+import type { AuditContext } from "@/lib/audit/types";
 
 export type UserRole = "admin" | "student" | "teacher" | "supervisor";
 
@@ -152,7 +158,10 @@ export async function getUserById(id: string): Promise<UserRecord> {
 }
 
 /* Insert a new user into the database */
-export async function createUser(user: CreateUserInput): Promise<UserRecord> {
+export async function createUser(
+  user: CreateUserInput,
+  audit?: AuditContext,
+): Promise<UserRecord> {
   const supabase = createClient();
 
   const { data, error } = await supabase
@@ -179,19 +188,51 @@ export async function createUser(user: CreateUserInput): Promise<UserRecord> {
     throw error;
   }
 
-  return mapDbUserRow(data as unknown as DbUser);
+  const result = mapDbUserRow(data as unknown as DbUser);
+  if (audit) {
+    await writeAuditLog({
+      ...audit,
+      action: "CREATE",
+      entity: "User",
+      entityId: result.id,
+      classId: normalizeClassIdForAudit(result.classId),
+      newValue: result,
+    });
+  } else {
+    warnMissingAudit("createUser");
+  }
+  return result;
 }
 
-export async function updateUser(user: UpdateUserInput): Promise<UserRecord> {
-  const supabase = createClient();
-  const payload: Record<string, string> = {
-    name: user.name ?? undefined,
-    email: user.email ?? undefined,
-    username: user.username ?? undefined,
-    qrCode: user.qrCode ?? undefined,
-    classId: user.classId ?? undefined,
+function buildUserUpdatePayload(
+  user: UpdateUserInput,
+): Record<string, string | boolean | null> {
+  const payload: Record<string, string | boolean | null> = {
     updatedAt: new Date().toISOString(),
   };
+
+  if (user.name !== undefined) payload.name = user.name;
+  if (user.email !== undefined) payload.email = user.email;
+  if (user.username !== undefined) payload.username = user.username;
+  if (user.qrCode !== undefined) payload.qrCode = user.qrCode;
+  if (user.password) payload.password = user.password;
+  if (user.classId !== undefined) {
+    payload.classId = user.classId.trim() === "" ? null : user.classId;
+  }
+  if (user.isActive !== undefined) payload.isActive = user.isActive;
+  if (user.isDeleted !== undefined) payload.isDeleted = user.isDeleted;
+  if (user.isLocked !== undefined) payload.isLocked = user.isLocked;
+
+  return payload;
+}
+
+export async function updateUser(
+  user: UpdateUserInput,
+  audit?: AuditContext,
+): Promise<UserRecord> {
+  const oldValue = audit ? await getUserById(user.id) : null;
+  const supabase = createClient();
+  const payload = buildUserUpdatePayload(user);
   const { data, error } = await supabase
     .from("User")
     .update(payload)
@@ -202,42 +243,69 @@ export async function updateUser(user: UpdateUserInput): Promise<UserRecord> {
     console.error("updateUser error:", error);
     throw error;
   }
-  return mapDbUserRow(data as unknown as DbUser);
+  const result = mapDbUserRow(data as unknown as DbUser);
+  if (audit) {
+    await writeAuditLog({
+      ...audit,
+      action: "UPDATE",
+      entity: "User",
+      entityId: result.id,
+      classId: normalizeClassIdForAudit(result.classId),
+      oldValue: oldValue ?? undefined,
+      newValue: result,
+    });
+  } else {
+    warnMissingAudit("updateUser");
+  }
+  return result;
 }
 
-export async function saveUser(input: SaveUserInput): Promise<UserRecord> {
+export async function saveUser(
+  input: SaveUserInput,
+  audit?: AuditContext,
+): Promise<UserRecord> {
   if (input.id) {
     const existing = await getUserById(input.id);
     if (existing) {
-      return updateUser({
-        id: input.id,
-        name: input.name,
-        email: input.email,
-        username: input.username,
-        password: input.password,
-        qrCode: input.qrCode,
-        classId: input.classId,
-      });
+      return updateUser(
+        {
+          id: input.id,
+          name: input.name,
+          email: input.email,
+          username: input.username,
+          password: input.password,
+          qrCode: input.qrCode,
+          classId: input.classId,
+        },
+        audit,
+      );
     }
   }
 
-  return createUser({
-    name: input.name,
-    email: input.email,
-    username: input.username,
-    password: input.password,
-    role: input.role,
-    qrCode: input.qrCode,
-    classId: input.classId,
-    isActive: input.isActive,
-  });
+  return createUser(
+    {
+      name: input.name,
+      email: input.email,
+      username: input.username,
+      password: input.password,
+      role: input.role,
+      qrCode: input.qrCode,
+      classId: input.classId,
+      isActive: input.isActive,
+    },
+    audit,
+  );
 }
 
-export async function deleteUserById(id: string): Promise<UserRecord> {
+export async function deleteUserById(
+  id: string,
+  audit?: AuditContext,
+): Promise<UserRecord> {
+  const oldValue = audit ? await getUserById(id) : null;
   const supabase = createClient();
   const payload: Record<string, string | boolean> = {
-    isDeleted: true.toString(),
-    isActive: true,
+    isDeleted: true,
+    isActive: false,
     isLocked: false,
     updatedAt: new Date().toISOString(),
   };
@@ -254,13 +322,30 @@ export async function deleteUserById(id: string): Promise<UserRecord> {
     throw error;
   }
 
-  return mapDbUserRow(data as unknown as DbUser);
+  const result = mapDbUserRow(data as unknown as DbUser);
+  if (audit) {
+    await writeAuditLog({
+      ...audit,
+      action: "DELETE",
+      entity: "User",
+      entityId: result.id,
+      classId: normalizeClassIdForAudit(result.classId),
+      oldValue: oldValue ?? undefined,
+      newValue: result,
+    });
+  } else {
+    warnMissingAudit("deleteUserById");
+  }
+  return result;
 }
 
 async function patchUserFlags(
   id: string,
   flags: Partial<Pick<DbUser, "isActive" | "isLocked" | "isDeleted">>,
+  audit?: AuditContext,
+  auditAction?: "LOCK" | "ACTIVATE",
 ): Promise<UserRecord> {
+  const oldValue = audit ? await getUserById(id) : null;
   const supabase = createClient();
   const payload: Record<string, string | boolean> = {
     ...flags,
@@ -279,17 +364,39 @@ async function patchUserFlags(
     throw error;
   }
 
-  return mapDbUserRow(data as unknown as DbUser);
+  const result = mapDbUserRow(data as unknown as DbUser);
+  if (audit && auditAction) {
+    await writeAuditLog({
+      ...audit,
+      action: auditAction,
+      entity: "User",
+      entityId: result.id,
+      classId: normalizeClassIdForAudit(result.classId),
+      oldValue: oldValue ?? undefined,
+      newValue: result,
+    });
+  } else if (!audit) {
+    warnMissingAudit("patchUserFlags");
+  } else if (!auditAction) {
+    warnMissingAudit("patchUserFlags(missing action)");
+  }
+  return result;
 }
 
-export async function deactivateUserById(id: string): Promise<UserRecord> {
+export async function deactivateUserById(
+  id: string,
+  audit?: AuditContext,
+): Promise<UserRecord> {
   const existing = await getUserById(id);
-  return patchUserFlags(id, { isActive: !existing.isActive });
+  return patchUserFlags(id, { isActive: !existing.isActive }, audit, "ACTIVATE");
 }
 
-export async function lockUserById(id: string): Promise<UserRecord> {
+export async function lockUserById(
+  id: string,
+  audit?: AuditContext,
+): Promise<UserRecord> {
   const existing = await getUserById(id);
-  return patchUserFlags(id, { isLocked: !existing.isLocked });
+  return patchUserFlags(id, { isLocked: !existing.isLocked }, audit, "LOCK");
 }
 
 export async function authenticateUser(email: string, password: string) {

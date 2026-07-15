@@ -24,6 +24,7 @@ import { Key, RefreshCw, Eye, EyeOff } from "lucide-react";
 import { getClasses, type ClassOption } from "@/lib/api/classes";
 import { type UserRecord, type UserRole, saveUser } from "@/lib/api/user";
 import { toast } from "sonner";
+import { useAuditContext } from "@/hooks/useAuditContext";
 
 const generateQRCode = () => {
   const timestamp = Date.now();
@@ -52,12 +53,16 @@ export function UserFormModal({
   onClose,
   onSuccess,
   user,
+  auditContext,
 }: {
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: () => void;
   user?: UserRecord;
+  auditContext?: ReturnType<typeof useAuditContext>;
 }) {
+  const auditFromHook = useAuditContext();
+  const audit = auditContext ?? auditFromHook;
   const isEditMode = user ? true : false;
   const [formData, setFormData] = useState({
     name: user?.name ?? "",
@@ -98,12 +103,44 @@ export function UserFormModal({
 
   useEffect(() => {
     if (!isOpen) return;
+
+    if (user) {
+      setExistingUser(user);
+      setFormData({
+        name: user.name ?? "",
+        email: user.email ?? "",
+        username: user.username ?? "",
+        password: user.password ?? "",
+        role: user.role ?? "",
+        isActive: user.isActive ?? true,
+        isDeleted: user.isDeleted ?? false,
+        createdAt: user.createdAt ?? new Date(),
+        updatedAt: user.updatedAt ?? new Date(),
+        qrCode: user.qrCode ?? generateQRCode(),
+        id: user.id ?? "",
+        classId: user.classId ?? "",
+      });
+    } else {
+      setExistingUser(null);
+      setFormData({
+        name: "",
+        email: "",
+        username: "",
+        password: "",
+        role: "",
+        isActive: true,
+        isDeleted: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        qrCode: generateQRCode(),
+        id: "",
+        classId: "",
+      });
+    }
+
     getClasses()
       .then((data) => {
         setClasses(data);
-        if (user) {
-          setExistingUser(user);
-        }
       })
       .catch((error) => {
         console.error(error);
@@ -169,17 +206,20 @@ export function UserFormModal({
 
     setSubmitting(true);
     try {
-      await saveUser({
-        id: isEditMode ? user?.id : undefined,
-        name: formData.name,
-        email: formData.email,
-        username: formData.username,
-        password: formData.password,
-        role: formData.role as UserRole,
-        qrCode: formData.qrCode,
-        classId: formData.classId,
-        isActive: formData.isActive,
-      });
+      await saveUser(
+        {
+          id: isEditMode ? (formData.id || user?.id) : undefined,
+          name: formData.name.trim(),
+          email: formData.email.trim(),
+          username: formData.username.trim(),
+          password: formData.password,
+          role: (formData.role || user?.role) as UserRole,
+          qrCode: formData.qrCode,
+          classId: formData.classId,
+          isActive: formData.isActive,
+        },
+        audit ?? undefined,
+      );
       toast.success(
         isEditMode && existingUser
           ? "User updated successfully"
@@ -217,8 +257,8 @@ export function UserFormModal({
           className="space-y-4 w-full min-h-0 flex-1 flex-col gap-3 overflow-hidden py-2 sm:gap-4 sm:py-3"
           onSubmit={handleSubmit}
         >
-          <div className="flex flex-row gap-4 justify-between min-h-0 flex-1 overflow-hidden py-2 sm:gap-4 sm:py-3">
-            <div className="w-1/2">
+          <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden py-2 sm:flex-row sm:gap-4 sm:py-3">
+            <div className="w-full md:w-1/2">
               <Paper
                 sx={{
                   p: 3,
@@ -248,11 +288,7 @@ export function UserFormModal({
                     }}
                   >
                     <QRCodeSVG
-                      value={
-                        isEditMode
-                          ? (user?.qrCode ?? "")
-                          : (formData.qrCode ?? "")
-                      }
+                      value={formData.qrCode ?? ""}
                       size={150}
                     />
                   </Box>
@@ -262,8 +298,7 @@ export function UserFormModal({
                   color="text.secondary"
                   sx={{ display: "block", mb: 1 }}
                 >
-                  Code:{" "}
-                  {isEditMode ? (user?.qrCode ?? "") : (formData.qrCode ?? "")}
+                  Code: {formData.qrCode ?? ""}
                 </Typography>
                 {!isEditMode && (
                   <Button
@@ -277,15 +312,13 @@ export function UserFormModal({
                 )}
               </Paper>
             </div>
-            <div className="w-1/2">
+            <div className="w-full md:w-1/2">
               <div className="space-y-2 mb-4">
                 <Label htmlFor="name">Full Name</Label>
                 <Input
                   id="name"
                   placeholder="Enter full name"
-                  value={
-                    isEditMode ? (user?.name ?? "") : (formData.name ?? "")
-                  }
+                  value={formData.name}
                   onChange={(e) =>
                     setFormData((prev) => ({ ...prev, name: e.target.value }))
                   }
@@ -299,9 +332,7 @@ export function UserFormModal({
                 <Input
                   id="email"
                   placeholder="Enter email"
-                  value={
-                    isEditMode ? (user?.email ?? "") : (formData.email ?? "")
-                  }
+                  value={formData.email}
                   onChange={(e) =>
                     setFormData((prev) => ({ ...prev, email: e.target.value }))
                   }
@@ -315,11 +346,7 @@ export function UserFormModal({
                 <Input
                   id="username"
                   placeholder="Enter username"
-                  value={
-                    isEditMode
-                      ? (user?.username ?? "")
-                      : (formData.username ?? "")
-                  }
+                  value={formData.username}
                   onChange={(e) =>
                     setFormData((prev) => ({
                       ...prev,
@@ -337,11 +364,7 @@ export function UserFormModal({
                   <Input
                     id="password"
                     placeholder="Enter password"
-                    value={
-                      isEditMode
-                        ? (user?.password ?? "")
-                        : (formData.password ?? "")
-                    }
+                    value={formData.password}
                     onChange={(e) =>
                       setFormData((prev) => ({
                         ...prev,
@@ -378,9 +401,7 @@ export function UserFormModal({
               <div className="space-y-2 mb-4">
                 <Label htmlFor="role">Role</Label>
                 <Select
-                  value={
-                    isEditMode ? (user?.role ?? "") : (formData.role ?? "")
-                  }
+                  value={formData.role}
                   onValueChange={(value) =>
                     setFormData((prev) => ({
                       ...prev,
@@ -404,11 +425,7 @@ export function UserFormModal({
               <div className="space-y-2 mb-4">
                 <Label htmlFor="class">Class</Label>
                 <Select
-                  value={
-                    isEditMode
-                      ? (user?.classId ?? "")
-                      : (formData.classId ?? "")
-                  }
+                  value={formData.classId}
                   onValueChange={(value) =>
                     setFormData((prev) => ({ ...prev, classId: value }))
                   }
@@ -431,11 +448,7 @@ export function UserFormModal({
               <div className="space-y-2 mb-4">
                 <Label htmlFor="isActive">Active</Label>
                 <Switch
-                  checked={
-                    isEditMode
-                      ? (user?.isActive ?? true)
-                      : (formData.isActive ?? true)
-                  }
+                  checked={formData.isActive}
                   onCheckedChange={(checked) =>
                     setFormData((prev) => ({ ...prev, isActive: checked }))
                   }

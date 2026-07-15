@@ -34,7 +34,7 @@ export function Settings() {
             <div className="w-10 h-10 bg-gradient-to-br from-violet-400 to-purple-500 rounded-xl flex items-center justify-center shadow-lg">
               <SettingsIcon size={20} className="text-white" />
             </div>
-            <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
               Settings
             </h1>
           </div>
@@ -52,35 +52,47 @@ export function Settings() {
       </motion.header>
 
       <Tabs defaultValue="academic-years" className="w-full">
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="grid h-auto w-full grid-cols-2 gap-1 sm:grid-cols-3 lg:grid-cols-6">
           <TabsTrigger
             value="academic-years"
-            className="flex items-center gap-2"
+            className="flex flex-col items-center gap-1 px-2 py-2 text-xs sm:flex-row sm:gap-2 sm:text-sm"
           >
             <Clock4 size={16} />
             Academic Years
           </TabsTrigger>
-          <TabsTrigger value="semesters" className="flex items-center gap-2">
+          <TabsTrigger
+            value="semesters"
+            className="flex flex-col items-center gap-1 px-2 py-2 text-xs sm:flex-row sm:gap-2 sm:text-sm"
+          >
             <Calendar size={16} />
             Semesters
           </TabsTrigger>
           <TabsTrigger
             value="attendance-period"
-            className="flex items-center gap-2"
+            className="flex flex-col items-center gap-1 px-2 py-2 text-xs sm:flex-row sm:gap-2 sm:text-sm"
           >
             <CalendarClock size={16} />
             Attendance Period
           </TabsTrigger>
 
-          <TabsTrigger value="grades" className="flex items-center gap-2">
+          <TabsTrigger
+            value="grades"
+            className="flex flex-col items-center gap-1 px-2 py-2 text-xs sm:flex-row sm:gap-2 sm:text-sm"
+          >
             <GraduationCap size={16} />
             Grades
           </TabsTrigger>
-          <TabsTrigger value="classes" className="flex items-center gap-2">
+          <TabsTrigger
+            value="classes"
+            className="flex flex-col items-center gap-1 px-2 py-2 text-xs sm:flex-row sm:gap-2 sm:text-sm"
+          >
             <BookA size={16} />
             Classes
           </TabsTrigger>
-          <TabsTrigger value="users" className="flex items-center gap-2">
+          <TabsTrigger
+            value="users"
+            className="flex flex-col items-center gap-1 px-2 py-2 text-xs sm:flex-row sm:gap-2 sm:text-sm"
+          >
             <Users size={16} />
             Users
           </TabsTrigger>

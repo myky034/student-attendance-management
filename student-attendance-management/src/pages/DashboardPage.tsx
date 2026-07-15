@@ -132,12 +132,14 @@ function StudentList({
   onDeleted,
   onLocked,
   onActivated,
+  variant = "table",
 }: {
   student: StudentRecord;
   attendanceRate: number;
   onDeleted: () => void;
   onLocked: () => void;
   onActivated: () => void;
+  variant?: "table" | "card";
 }) {
   const [open, setOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
@@ -241,336 +243,576 @@ function StudentList({
   const todayDate = getVietnamDateString();
   const todayAttendance = getTodayAttendanceRecord(student, todayDate);
 
+  const sortedHistory = [...paginatedHistory].sort(
+    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
+  );
+
+  const statusBadge = student.isLocked ? (
+    <Badge variant="destructive">Locked</Badge>
+  ) : (
+    <Badge variant={student.isActive ? "success" : "danger"}>
+      {student.isActive ? "Active" : "Inactive"}
+    </Badge>
+  );
+
+  const todayBadge = todayAttendance ? (
+    <Badge
+      variant={
+        todayAttendance.status === "present"
+          ? "success"
+          : todayAttendance.status === "excused_absence"
+            ? "warning"
+            : "danger"
+      }
+    >
+      {todayAttendance.status === "present"
+        ? "Present"
+        : todayAttendance.status === "excused_absence"
+          ? "Excused Absence"
+          : "Absent"}
+    </Badge>
+  ) : (
+    <Badge variant="outline">Not Marked</Badge>
+  );
+
+  const attendanceBar = (
+    <div className="flex items-center gap-2 min-w-0">
+      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800">
+        <div
+          className="h-full rounded-full transition-all duration-500"
+          style={{
+            width: `${attendanceRate}%`,
+            background:
+              attendanceRate >= 75
+                ? "linear-gradient(90deg, #84fab0 0%, #8fd3f4 100%)"
+                : attendanceRate >= 50
+                  ? "linear-gradient(90deg, #ffeaa7 0%, #fdcb6e 100%)"
+                  : "linear-gradient(90deg, #ffa8b5 0%, #ffd3a5 100%)",
+          }}
+        />
+      </div>
+      <span className="text-sm font-semibold tabular-nums">
+        {attendanceRate.toFixed(1)}%
+      </span>
+    </div>
+  );
+
+  const actionButtons = (
+    <div className="flex flex-wrap items-center gap-2">
+      <Button variant="outline" size="sm" className="flex-1 sm:flex-none" asChild>
+        <Link to={`/users/detail/${student.id}`}>
+          <Eye size={16} className="mr-1.5" />
+          View
+        </Link>
+      </Button>
+      <Button variant="outline" size="sm" onClick={handleEdit} className="flex-1 sm:flex-none">
+        <Edit size={16} className="mr-1.5" />
+        Edit
+      </Button>
+      <AlertDialog>
+        <AlertDialogTrigger asChild>
+          <Button variant="outline" size="sm" className="flex-1 text-red-600 sm:flex-none">
+            <Trash2 size={16} className="mr-1.5" />
+            Delete
+          </Button>
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Student?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{student.name}"? This action
+              cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={handleClose}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog>
+        <AlertDialogTrigger asChild>
+          <Button variant="outline" size="sm" className="flex-1 sm:flex-none">
+            {student.isActive ? (
+              <PowerOff size={16} className="mr-1.5" />
+            ) : (
+              <Power size={16} className="mr-1.5" />
+            )}
+            {student.isActive ? "Deactivate" : "Activate"}
+          </Button>
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {student.isActive ? "Deactivate Student?" : "Activate Student?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to{" "}
+              {student.isActive ? "deactivate the student" : "activate the student"}{" "}
+              "{student.name}"?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={handleClose}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => handleActivate(student.id)}
+              className={cn(
+                "bg-red-600 hover:bg-red-700",
+                !student.isActive && "bg-green-600 hover:bg-green-700",
+              )}
+              disabled={isDeactivating}
+            >
+              {student.isActive ? "Deactivate Student" : "Activate Student"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog>
+        <AlertDialogTrigger asChild>
+          <Button variant="outline" size="sm" className="flex-1 sm:flex-none">
+            {student.isLocked ? (
+              <LockOpen size={16} className="mr-1.5" />
+            ) : (
+              <Lock size={16} className="mr-1.5" />
+            )}
+            {student.isLocked ? "Unlock" : "Lock"}
+          </Button>
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {student.isLocked ? "Unlock Student?" : "Lock Student?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to{" "}
+              {student.isLocked ? "unlock the student" : "lock the student"} "
+              {student.name}"?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={handleClose}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => handleLock(student.id)}
+              className={cn(
+                "bg-green-600 hover:bg-green-700",
+                !student.isLocked && "bg-red-600 hover:bg-red-700",
+              )}
+              disabled={isLocking}
+            >
+              {student.isLocked ? "Unlock Student" : "Lock Student"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+
+  const historyContent =
+    student.studentAttendance.length > 0 ? (
+      <>
+        {variant === "card" ? (
+          <div className="mt-3 flex flex-col gap-2">
+            {sortedHistory.map((record) => (
+              <div
+                key={`${record.date}-${record.status}`}
+                className="rounded-md border border-zinc-200 bg-zinc-50/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/50"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-medium">
+                    {new Date(record.date).toLocaleDateString()}
+                  </span>
+                  <div className="flex flex-wrap gap-1">
+                    <Badge
+                      variant={
+                        record.status === "present"
+                          ? "success"
+                          : record.status === "excused_absence"
+                            ? "warning"
+                            : "danger"
+                      }
+                    >
+                      {record.status === "present"
+                        ? "Present"
+                        : record.status === "excused_absence"
+                          ? "Excused Absence"
+                          : "Absent"}
+                    </Badge>
+                    {record.isLate && (
+                      <Badge variant="warning">Late</Badge>
+                    )}
+                  </div>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Time: {formatVietnamTime(record.timestamp)}
+                </p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Date</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Time</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {sortedHistory.map((record) => (
+                <TableRow key={`${record.date}-${record.status}`}>
+                  <TableCell>
+                    {new Date(record.date).toLocaleDateString()}
+                  </TableCell>
+                  <TableCell>
+                    <Badge
+                      variant={
+                        record.status === "present"
+                          ? "success"
+                          : record.status === "excused_absence"
+                            ? "warning"
+                            : "danger"
+                      }
+                    >
+                      {record.status === "present"
+                        ? "Present"
+                        : record.status === "excused_absence"
+                          ? "Excused Absence"
+                          : "Absent"}
+                    </Badge>
+                    {record.isLate && (
+                      <Badge variant="warning" className="ml-2">
+                        Late
+                      </Badge>
+                    )}
+                  </TableCell>
+                  <TableCell>{formatVietnamTime(record.timestamp)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+        <Pagination
+          currentPage={historyPage}
+          totalPages={totalHistoryPages}
+          onPageChange={setHistoryPage}
+        />
+      </>
+    ) : (
+      <p className="text-sm text-zinc-500 dark:text-zinc-400">
+        No attendance records yet
+      </p>
+    );
+
+  if (loading) {
+    if (variant === "card") {
+      return (
+        <div className="rounded-lg border border-zinc-200 bg-card p-4 shadow-sm dark:border-zinc-800">
+          <p className="text-center text-sm text-zinc-500">Loading...</p>
+        </div>
+      );
+    }
+    return (
+      <TableRow>
+        <TableCell colSpan={7} className="h-24 text-center text-zinc-500">
+          Loading...
+        </TableCell>
+      </TableRow>
+    );
+  }
+
+  if (variant === "card") {
+    return (
+      <div className="rounded-lg border border-zinc-200 bg-card p-4 shadow-sm dark:border-zinc-800">
+        <div className="flex items-start gap-3">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-indigo-200 to-sky-200 text-sm font-semibold text-indigo-800 dark:from-indigo-900 dark:to-sky-900 dark:text-indigo-100">
+            {student.name.charAt(0)}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold text-base text-zinc-900 dark:text-zinc-50">
+              {student.holy_name ? `${student.holy_name} ` : ""}
+              {student.name}
+            </p>
+            <p className="text-xs text-muted-foreground">ID: {student.id}</p>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-8 shrink-0"
+            onClick={() => setOpen(!open)}
+            aria-expanded={open}
+            aria-label={`Toggle attendance history for ${student.name}`}
+          >
+            <ChevronDown
+              size={16}
+              className={cn(
+                "transition-transform duration-200",
+                open && "rotate-180",
+              )}
+            />
+          </Button>
+        </div>
+
+        <div className="mt-3 space-y-1.5 text-sm text-muted-foreground">
+          <p>
+            <span className="font-medium text-zinc-700 dark:text-zinc-300">
+              Email:
+            </span>{" "}
+            <span className="break-all">{student.email}</span>
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-medium text-zinc-700 dark:text-zinc-300">
+              Status:
+            </span>
+            {statusBadge}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-medium text-zinc-700 dark:text-zinc-300">
+              Today:
+            </span>
+            {todayBadge}
+          </div>
+          <div>
+            <p className="mb-1 font-medium text-zinc-700 dark:text-zinc-300">
+              Attendance:
+            </p>
+            {attendanceBar}
+          </div>
+        </div>
+
+        <div className="mt-4 border-t border-zinc-200 pt-3 dark:border-zinc-700">
+          {actionButtons}
+        </div>
+
+        {open && (
+          <div className="mt-4 border-t border-zinc-200 pt-3 dark:border-zinc-700">
+            <p className="mb-3 text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+              Attendance History
+            </p>
+            {historyContent}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <>
-      {loading ? (
-        <TableRow>
-          <TableCell colSpan={7} className="h-24 text-center text-zinc-500">
-            Loading...
+      <TableRow className="hover:bg-muted/50">
+        <TableCell className="w-10">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-8"
+            onClick={() => setOpen(!open)}
+            aria-expanded={open}
+            aria-label={`Toggle attendance history for ${student.name}`}
+          >
+            <ChevronDown
+              size={16}
+              className={cn(
+                "transition-transform duration-200",
+                open && "rotate-180",
+              )}
+            />
+          </Button>
+        </TableCell>
+        <TableCell>
+          <div className="flex items-center gap-2 min-w-0 max-w-[180px]">
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-indigo-200 to-sky-200 text-sm font-semibold text-indigo-800 dark:from-indigo-900 dark:to-sky-900 dark:text-indigo-100">
+              {student.name.charAt(0)}
+            </div>
+            <div className="min-w-0">
+              <p className="truncate font-medium text-zinc-900 dark:text-zinc-50">
+                {student.holy_name ? student.holy_name : ""} {student.name}
+              </p>
+              <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">
+                ID: {student.id}
+              </p>
+            </div>
+          </div>
+        </TableCell>
+        <TableCell className="max-w-[140px] truncate" title={student.email}>
+          {student.email}
+        </TableCell>
+        <TableCell>{statusBadge}</TableCell>
+        <TableCell>{todayBadge}</TableCell>
+        <TableCell>{attendanceBar}</TableCell>
+        <TableCell className="text-right">
+          <div className="flex items-center justify-end gap-1">
+            <Link
+              className="inline-flex size-8 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+              to={`/users/detail/${student.id}`}
+            >
+              <Eye size={16} />
+            </Link>
+            <IconButton
+              aria-label="more"
+              id="long-button"
+              aria-controls={opens ? "long-menu" : undefined}
+              aria-expanded={opens}
+              aria-haspopup="true"
+              onClick={handleClick}
+            >
+              <MoreHorizontal size={16} />
+            </IconButton>
+            <Menu
+              id="long-menu"
+              anchorEl={anchorEl}
+              open={opens}
+              onClose={handleClose}
+              slotProps={{
+                paper: {
+                  style: {
+                    maxHeight: 48 * 4.5,
+                    width: "20ch",
+                  },
+                },
+                list: {
+                  "aria-labelledby": "long-button",
+                },
+              }}
+            >
+              <MenuItem key="Edit" onClick={handleEdit}>
+                <Edit size={16} className="mr-2" />
+                Edit
+              </MenuItem>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <MenuItem key="Delete">
+                    <Trash2 size={16} className="mr-2" />
+                    Delete
+                  </MenuItem>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete Student?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Are you sure you want to delete "{student.name}"? This
+                      action cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel onClick={handleClose}>
+                      Cancel
+                    </AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={handleDelete}
+                      className="bg-red-600 hover:bg-red-700"
+                    >
+                      Delete
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <MenuItem key="Activate">
+                    {student.isActive ? (
+                      <PowerOff size={16} className="mr-2" />
+                    ) : (
+                      <Power size={16} className="mr-2" />
+                    )}
+                    {student.isActive ? "Deactivate" : "Activate"}
+                  </MenuItem>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>
+                      {student.isActive
+                        ? "Deactivate Student?"
+                        : "Activate Student?"}
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Are you sure you want to{" "}
+                      {student.isActive
+                        ? "deactivate the student"
+                        : "activate the student"}{" "}
+                      "{student.name}"?
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel onClick={handleClose}>
+                      Cancel
+                    </AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={() => handleActivate(student.id)}
+                      className={cn(
+                        "bg-red-600 hover:bg-red-700",
+                        !student.isActive &&
+                          "bg-green-600 hover:bg-green-700",
+                      )}
+                      disabled={isDeactivating}
+                    >
+                      {student.isActive
+                        ? "Deactivate Student"
+                        : "Activate Student"}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <MenuItem key="Lock">
+                    {student.isLocked ? (
+                      <LockOpen size={16} className="mr-2" />
+                    ) : (
+                      <Lock size={16} className="mr-2" />
+                    )}
+                    {student.isLocked ? "Unlock" : "Lock"}
+                  </MenuItem>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>
+                      {student.isLocked ? "Unlock Student?" : "Lock Student?"}
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Are you sure you want to{" "}
+                      {student.isLocked
+                        ? "unlock the student"
+                        : "lock the student"}{" "}
+                      "{student.name}"?
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel onClick={handleClose}>
+                      Cancel
+                    </AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={() => handleLock(student.id)}
+                      className={cn(
+                        "bg-green-600 hover:bg-green-700",
+                        !student.isLocked && "bg-red-600 hover:bg-red-700",
+                      )}
+                      disabled={isLocking}
+                    >
+                      {student.isLocked ? "Unlock Student" : "Lock Student"}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </Menu>
+          </div>
+        </TableCell>
+      </TableRow>
+      {open && (
+        <TableRow className="bg-zinc-50/80 dark:bg-zinc-900/50">
+          <TableCell colSpan={7} className="p-0">
+            <div className="px-4 py-4">
+              <p className="mb-3 text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+                Attendance History
+              </p>
+              {historyContent}
+            </div>
           </TableCell>
         </TableRow>
-      ) : (
-        <>
-          <TableRow className="hover:bg-muted/50">
-            <TableCell className="w-10">
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="size-8"
-                onClick={() => setOpen(!open)}
-                aria-expanded={open}
-                aria-label={`Toggle attendance history for ${student.name}`}
-              >
-                <ChevronDown
-                  size={16}
-                  className={cn(
-                    "transition-transform duration-200",
-                    open && "rotate-180",
-                  )}
-                />
-              </Button>
-            </TableCell>
-            <TableCell>
-              <div className="flex items-center gap-2">
-                <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-indigo-200 to-sky-200 text-sm font-semibold text-indigo-800 dark:from-indigo-900 dark:to-sky-900 dark:text-indigo-100">
-                  {student.name.charAt(0)}
-                </div>
-                <div>
-                  <p className="font-medium text-zinc-900 dark:text-zinc-50">
-                    {student.holy_name ? student.holy_name : ""} {student.name}
-                  </p>
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                    ID: {student.id}
-                  </p>
-                </div>
-              </div>
-            </TableCell>
-            <TableCell>{student.email}</TableCell>
-            <TableCell>
-              {student.isLocked ? (
-                <Badge variant="destructive">Locked</Badge>
-              ) : (
-                <Badge variant={student.isActive ? "success" : "danger"}>
-                  {student.isActive ? "Active" : "Inactive"}
-                </Badge>
-              )}
-            </TableCell>
-            <TableCell>
-              {todayAttendance ? (
-                <Badge
-                  variant={
-                    todayAttendance.status === "present"
-                      ? "success"
-                      : todayAttendance.status === "excused_absence"
-                        ? "warning"
-                        : "danger"
-                  }
-                >
-                  {todayAttendance.status === "present"
-                    ? "Present"
-                    : todayAttendance.status === "excused_absence"
-                      ? "Excused Absence"
-                      : "Absent"}
-                </Badge>
-              ) : (
-                <Badge variant="outline">Not Marked</Badge>
-              )}
-            </TableCell>
-            <TableCell>
-              <div className="flex items-center gap-2 min-w-[120px]">
-                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800">
-                  <div
-                    className="h-full rounded-full transition-all duration-500"
-                    style={{
-                      width: `${attendanceRate}%`,
-                      background:
-                        attendanceRate >= 75
-                          ? "linear-gradient(90deg, #84fab0 0%, #8fd3f4 100%)"
-                          : attendanceRate >= 50
-                            ? "linear-gradient(90deg, #ffeaa7 0%, #fdcb6e 100%)"
-                            : "linear-gradient(90deg, #ffa8b5 0%, #ffd3a5 100%)",
-                    }}
-                  />
-                </div>
-                <span className="text-sm font-semibold tabular-nums">
-                  {attendanceRate.toFixed(1)}%
-                </span>
-              </div>
-            </TableCell>
-            <TableCell className="text-right">
-              <div className="flex items-center justify-end gap-1">
-                <Link
-                  className="inline-flex size-8 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
-                  to={`/users/detail/${student.id}`}
-                >
-                  <Eye size={16} />
-                </Link>
-                <IconButton
-                  aria-label="more"
-                  id="long-button"
-                  aria-controls={opens ? "long-menu" : undefined}
-                  aria-expanded={opens}
-                  aria-haspopup="true"
-                  onClick={handleClick}
-                >
-                  <MoreHorizontal size={16} />{" "}
-                </IconButton>
-                <Menu
-                  id="long-menu"
-                  anchorEl={anchorEl}
-                  open={opens}
-                  onClose={handleClose}
-                  slotProps={{
-                    paper: {
-                      style: {
-                        maxHeight: 48 * 4.5,
-                        width: "20ch",
-                      },
-                    },
-                    list: {
-                      "aria-labelledby": "long-button",
-                    },
-                  }}
-                >
-                  <MenuItem key="Edit" onClick={handleEdit}>
-                    <Edit size={16} className="mr-2" />
-                    Edit
-                  </MenuItem>
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <MenuItem key="Delete">
-                        <Trash2 size={16} className="mr-2" />
-                        Delete
-                      </MenuItem>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Delete Student?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          Are you sure you want to delete "{student.name}"? This
-                          action cannot be undone.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel onClick={handleClose}>
-                          Cancel
-                        </AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={handleDelete}
-                          className="bg-red-600 hover:bg-red-700"
-                        >
-                          Delete
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <MenuItem key="Activate">
-                        {student.isActive ? (
-                          <PowerOff size={16} className="mr-2" />
-                        ) : (
-                          <Power size={16} className="mr-2" />
-                        )}
-                        {student.isActive ? "Deactivate" : "Activate"}
-                      </MenuItem>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>
-                          {student.isActive
-                            ? "Deactivate Student?"
-                            : "Activate Student?"}
-                        </AlertDialogTitle>
-                        <AlertDialogDescription>
-                          Are you sure you want to{" "}
-                          {student.isActive
-                            ? "deactivate the student"
-                            : "activate the student"}{" "}
-                          "{student.name}"?
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel onClick={handleClose}>
-                          Cancel
-                        </AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={() => handleActivate(student.id)}
-                          className={cn(
-                            "bg-red-600 hover:bg-red-700",
-                            !student.isActive &&
-                              "bg-green-600 hover:bg-green-700",
-                          )}
-                          disabled={isDeactivating}
-                        >
-                          {student.isActive
-                            ? "Deactivate Student"
-                            : "Activate Student"}
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <MenuItem key="Lock">
-                        {student.isLocked ? (
-                          <LockOpen size={16} className="mr-2" />
-                        ) : (
-                          <Lock size={16} className="mr-2" />
-                        )}
-                        {student.isLocked ? "Unlock" : "Lock"}
-                      </MenuItem>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>
-                          {student.isLocked
-                            ? "Unlock Student?"
-                            : "Lock Student?"}
-                        </AlertDialogTitle>
-                        <AlertDialogDescription>
-                          Are you sure you want to{" "}
-                          {student.isLocked
-                            ? "unlock the student"
-                            : "lock the student"}{" "}
-                          "{student.name}
-                          "?
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel onClick={handleClose}>
-                          Cancel
-                        </AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={() => handleLock(student.id)}
-                          className={cn(
-                            "bg-green-600 hover:bg-green-700",
-                            !student.isLocked && "bg-red-600 hover:bg-red-700",
-                          )}
-                          disabled={isLocking}
-                        >
-                          {student.isLocked ? "Unlock Student" : "Lock Student"}
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                </Menu>
-              </div>
-            </TableCell>
-          </TableRow>
-          {open && (
-            <TableRow className="bg-zinc-50/80 dark:bg-zinc-900/50">
-              <TableCell colSpan={7} className="p-0">
-                <div className="px-4 py-4">
-                  <p className="mb-3 text-sm font-semibold text-zinc-900 dark:text-zinc-50">
-                    Attendance History
-                  </p>
-                  {student.studentAttendance.length > 0 ? (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Date</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead>Time</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {paginatedHistory
-                          .sort(
-                            (a, b) =>
-                              new Date(b.date).getTime() -
-                              new Date(a.date).getTime(),
-                          )
-                          .map((record) => (
-                            <TableRow key={`${record.date}-${record.status}`}>
-                              <TableCell>
-                                {new Date(record.date).toLocaleDateString()}
-                              </TableCell>
-                              <TableCell>
-                                <Badge
-                                  variant={
-                                    record.status === "present"
-                                      ? "success"
-                                      : record.status === "excused_absence"
-                                        ? "warning"
-                                        : "danger"
-                                  }
-                                >
-                                  {record.status === "present"
-                                    ? "Present"
-                                    : record.status === "excused_absence"
-                                      ? "Excused Absence"
-                                      : "Absent"}
-                                </Badge>
-                                {record.isLate && (
-                                  <Badge variant="warning" className="ml-2">
-                                    Late
-                                  </Badge>
-                                )}
-                              </TableCell>
-                              <TableCell>
-                                {formatVietnamTime(record.timestamp)}
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                      </TableBody>
-                    </Table>
-                  ) : (
-                    <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                      No attendance records yet
-                    </p>
-                  )}
-                  <Pagination
-                    currentPage={historyPage}
-                    totalPages={totalHistoryPages}
-                    onPageChange={setHistoryPage}
-                  />
-                </div>
-              </TableCell>
-            </TableRow>
-          )}
-        </>
       )}
     </>
   );
@@ -772,10 +1014,10 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-8 flex flex-col overflow-hidden">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="flex items-center gap-3 mb-2">
-            <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
               Dashboard
             </h1>
             {user && (
@@ -816,7 +1058,7 @@ export function DashboardPage() {
       ) : (
         <Card>
           <CardHeader>
-            <div className="flex justify-between items-center">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <div className="flex items-center gap-2">
                   <CardTitle>
@@ -838,7 +1080,7 @@ export function DashboardPage() {
                   View attendance status and history for each student
                 </CardDescription>
               </div>
-              <div className="flex justify-end gap-3">
+              <div className="flex w-full flex-wrap justify-end gap-2 sm:gap-3 sm:w-auto">
                 <Button
                   onClick={() => navigate("/users/create")}
                   variant="outline"
@@ -861,8 +1103,8 @@ export function DashboardPage() {
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex gap-3">
-              <div className="relative max-w-sm flex-1">
+            <div className="flex flex-col gap-3 w-full md:flex-row md:flex-wrap md:items-end md:gap-4">
+              <div className="relative w-full min-w-0 md:max-w-sm md:flex-1">
                 <Search
                   size={16}
                   className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400"
@@ -878,7 +1120,7 @@ export function DashboardPage() {
                   className="w-full rounded-lg border border-zinc-200 bg-white py-2 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
                 />
               </div>
-              <div className="flex-1 max-w-sm min-w-40">
+              <div className="w-full min-w-0 md:max-w-sm md:flex-1">
                 <Select
                   value={statusFilter}
                   onValueChange={(value) => {
@@ -886,7 +1128,7 @@ export function DashboardPage() {
                     setStudentPage(1);
                   }}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="w-full min-w-0">
                     <SelectValue placeholder="All" />
                   </SelectTrigger>
                   <SelectContent>
@@ -897,7 +1139,7 @@ export function DashboardPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="flex-1 max-w-sm min-w-40">
+              <div className="w-full min-w-0 md:max-w-sm md:flex-1">
                 <Select
                   value={attendanceFilter}
                   onValueChange={(value) => {
@@ -905,7 +1147,7 @@ export function DashboardPage() {
                     setStudentPage(1);
                   }}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="w-full min-w-0">
                     <SelectValue placeholder="All" />
                   </SelectTrigger>
                   <SelectContent>
@@ -918,10 +1160,11 @@ export function DashboardPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div>
+              <div className="flex flex-wrap gap-2 w-full md:w-auto">
                 <Button
                   variant="outline"
                   size="sm"
+                  className="flex-1 sm:flex-none"
                   onClick={() => {
                     setSearchTerm("");
                     setStatusFilter("all");
@@ -933,34 +1176,19 @@ export function DashboardPage() {
                 </Button>
               </div>
             </div>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-10" />
-                  <TableHead>Name</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Today</TableHead>
-                  <TableHead>Attendance</TableHead>
-                  <TableHead className="w-10 text-center">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredStudents.length === 0 ? (
-                  <TableRow>
-                    <TableCell
-                      colSpan={7}
-                      className="h-24 text-center text-zinc-500"
-                    >
-                      {students.length === 0
-                        ? "No students found in the system yet."
-                        : "No students match the current filters."}
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  paginatedStudents.map((student) => (
+            {filteredStudents.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-zinc-200 py-12 text-center text-zinc-500 dark:border-zinc-800">
+                {students.length === 0
+                  ? "No students found in the system yet."
+                  : "No students match the current filters."}
+              </div>
+            ) : (
+              <>
+                <div className="flex flex-col gap-3 md:hidden">
+                  {paginatedStudents.map((student) => (
                     <StudentList
                       key={student.id}
+                      variant="card"
                       student={student}
                       attendanceRate={
                         attendanceRateByStudentId[student.id] ?? 0
@@ -969,10 +1197,38 @@ export function DashboardPage() {
                       onLocked={handleStudentLocked}
                       onActivated={handleStudentActivated}
                     />
-                  ))
-                )}
-              </TableBody>
-            </Table>
+                  ))}
+                </div>
+                <Table className="hidden md:table">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-10" />
+                      <TableHead>Name</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Today</TableHead>
+                      <TableHead>Attendance</TableHead>
+                      <TableHead className="w-10 text-center">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedStudents.map((student) => (
+                      <StudentList
+                        key={student.id}
+                        variant="table"
+                        student={student}
+                        attendanceRate={
+                          attendanceRateByStudentId[student.id] ?? 0
+                        }
+                        onDeleted={handleStudentDeleted}
+                        onLocked={handleStudentLocked}
+                        onActivated={handleStudentActivated}
+                      />
+                    ))}
+                  </TableBody>
+                </Table>
+              </>
+            )}
             <Pagination
               currentPage={studentPage}
               totalPages={totalStudentPages}

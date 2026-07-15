@@ -1,6 +1,8 @@
 import { createClient } from "@/lib/supabase/client";
 import { getVietnamDateString, toVietnamTimestamp } from "@/lib/datetime";
 import { getSemesterForDate } from "@/lib/api/semester";
+import { writeAuditLogSafe } from "@/lib/audit/writeAuditLog";
+import type { AuditContext } from "@/lib/audit/types";
 
 export type Status = "present" | "absent" | "excused_absence";
 
@@ -191,6 +193,7 @@ export async function getAttendanceRecordsByStudentIds(
 
 export async function createAttendanceRecord(
   input: CreateAttendanceRecordInput,
+  audit?: AuditContext,
 ): Promise<AttendanceRecord> {
   const supabase = createClient();
   const date = input.date ? toDateOnly(input.date) : getVietnamDateString();
@@ -220,7 +223,18 @@ export async function createAttendanceRecord(
     console.error("createAttendanceRecord error:", error);
     throw new Error(formatSupabaseError(error));
   }
-  return mapAttendanceRecordRow(data as AttendanceRecordRow);
+  const result = mapAttendanceRecordRow(data as AttendanceRecordRow);
+  if (audit) {
+    writeAuditLogSafe({
+      ...audit,
+      action: "CREATE",
+      entity: "AttendanceRecord",
+      entityId: result.id,
+      classId: result.classId,
+      newValue: result,
+    });
+  }
+  return result;
 }
 
 export type UpdateAttendanceRecordInput = {
@@ -236,6 +250,8 @@ export type UpdateAttendanceRecordInput = {
 
 export async function updateAttendanceRecord(
   input: UpdateAttendanceRecordInput,
+  audit?: AuditContext,
+  oldValue?: AttendanceRecord | null,
 ): Promise<AttendanceRecord> {
   const supabase = createClient();
   const timestamp = toVietnamTimestamp(input.timestamp);
@@ -261,7 +277,19 @@ export async function updateAttendanceRecord(
     console.error("updateAttendanceRecord error:", error);
     throw new Error(formatSupabaseError(error));
   }
-  return mapAttendanceRecordRow(data as AttendanceRecordRow);
+  const result = mapAttendanceRecordRow(data as AttendanceRecordRow);
+  if (audit) {
+    writeAuditLogSafe({
+      ...audit,
+      action: "UPDATE",
+      entity: "AttendanceRecord",
+      entityId: result.id,
+      classId: result.classId,
+      oldValue: oldValue ?? undefined,
+      newValue: result,
+    });
+  }
+  return result;
 }
 
 export type SaveAttendanceRecordInput = {
@@ -278,6 +306,7 @@ export type SaveAttendanceRecordInput = {
 /** Tạo mới hoặc cập nhật nếu học sinh đã có bản ghi trong ngày */
 export async function saveAttendanceRecord(
   input: SaveAttendanceRecordInput,
+  audit?: AuditContext,
 ): Promise<AttendanceRecord> {
   const date = input.date ? toDateOnly(input.date) : getVietnamDateString();
   const timestamp = toVietnamTimestamp(input.timestamp, date);
@@ -290,27 +319,34 @@ export async function saveAttendanceRecord(
   });
 
   if (existing.length > 0) {
-    return updateAttendanceRecord({
-      id: existing[0].id,
+    return updateAttendanceRecord(
+      {
+        id: existing[0].id,
+        status: input.status,
+        timestamp,
+        createdById: input.createdById,
+        leaveRequestId:
+          input.leaveRequestId ?? existing[0].leaveRequestId ?? null,
+        classId: input.classId,
+        semesterId: semesterId ?? existing[0].semesterId ?? null,
+      },
+      audit,
+      existing[0],
+    );
+  }
+
+  return createAttendanceRecord(
+    {
+      id: crypto.randomUUID(),
+      studentId: input.studentId,
+      date,
       status: input.status,
       timestamp,
       createdById: input.createdById,
-      leaveRequestId:
-        input.leaveRequestId ?? existing[0].leaveRequestId ?? null,
+      leaveRequestId: input.leaveRequestId ?? null,
       classId: input.classId,
-      semesterId: semesterId ?? existing[0].semesterId ?? null,
-    });
-  }
-
-  return createAttendanceRecord({
-    id: crypto.randomUUID(),
-    studentId: input.studentId,
-    date,
-    status: input.status,
-    timestamp,
-    createdById: input.createdById,
-    leaveRequestId: input.leaveRequestId ?? null,
-    classId: input.classId,
-    semesterId,
-  });
+      semesterId,
+    },
+    audit,
+  );
 }

@@ -689,7 +689,7 @@ export function ParentPortal() {
                 <Button variant="outline" size="icon" onClick={handleBack}>
                   <ArrowLeft size={16} />
                 </Button>
-                <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
+                <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
                   {student.name}
                   {student.class?.name ? ` - ${student.class.name}` : ""}
                 </h1>
@@ -705,10 +705,10 @@ export function ParentPortal() {
               </div>
             </div>
             <Tabs className="w-full" defaultValue="attendance-history">
-              <TabsList className="grid w-full grid-cols-3">
+              <TabsList className="grid h-auto w-full grid-cols-1 gap-1 sm:grid-cols-3">
                 <TabsTrigger
                   value="attendance-history"
-                  className="flex items-center justify-center gap-2"
+                  className="flex items-center justify-center gap-2 px-2 py-2 text-xs sm:text-sm"
                   onClick={() => handleClearErrors()}
                 >
                   <History size={16} />
@@ -716,7 +716,7 @@ export function ParentPortal() {
                 </TabsTrigger>
                 <TabsTrigger
                   value="request-leave"
-                  className="flex items-center justify-center gap-2"
+                  className="flex items-center justify-center gap-2 px-2 py-2 text-xs sm:text-sm"
                   onClick={() => handleClearErrors}
                 >
                   <Calendar1 size={16} />
@@ -724,7 +724,7 @@ export function ParentPortal() {
                 </TabsTrigger>
                 <TabsTrigger
                   value="leave-requests-status"
-                  className="flex items-center justify-center gap-2"
+                  className="flex items-center justify-center gap-2 px-2 py-2 text-xs sm:text-sm"
                   onClick={() => handleClearErrors()}
                 >
                   <Clock size={16} />
@@ -748,7 +748,53 @@ export function ParentPortal() {
                       </p>
                     </>
                   ) : (
-                    <Table>
+                    <>
+                      <div className="flex flex-col gap-3 md:hidden text-left">
+                        {[...student.studentAttendance]
+                          .sort(
+                            (a, b) =>
+                              new Date(b.date).getTime() -
+                              new Date(a.date).getTime(),
+                          )
+                          .map((attendance) => (
+                            <div
+                              key={attendance.id}
+                              className="rounded-lg border border-zinc-200 bg-card p-4 shadow-sm dark:border-zinc-800"
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="font-semibold text-base">
+                                  {new Date(attendance.date).toLocaleDateString()}
+                                </p>
+                                <Badge
+                                  variant={
+                                    attendance.status === "present"
+                                      ? "success"
+                                      : attendance.status === "excused_absence"
+                                        ? "warning"
+                                        : "danger"
+                                  }
+                                >
+                                  {attendance.status === "present"
+                                    ? "Present"
+                                    : attendance.status === "excused_absence"
+                                      ? "Excused Absence"
+                                      : "Absent"}
+                                </Badge>
+                              </div>
+                              <div className="mt-2 space-y-1 text-sm text-muted-foreground">
+                                <p>
+                                  <span className="font-medium text-zinc-700 dark:text-zinc-300">Time:</span>{" "}
+                                  {new Date(attendance.timestamp).toLocaleString()}
+                                </p>
+                                <p>
+                                  <span className="font-medium text-zinc-700 dark:text-zinc-300">Created By:</span>{" "}
+                                  {attendance.createdByName}
+                                </p>
+                              </div>
+                            </div>
+                          ))}
+                      </div>
+                      <Table className="hidden md:table">
                       <TableHeader>
                         <TableRow>
                           <TableHead>Date</TableHead>
@@ -791,13 +837,14 @@ export function ParentPortal() {
                                   attendance.timestamp,
                                 ).toLocaleString()}
                               </TableCell>
-                              <TableCell className="text-left">
+                              <TableCell className="text-left max-w-[120px] truncate" title={attendance.createdByName}>
                                 {attendance.createdByName}
                               </TableCell>
                             </TableRow>
                           ))}
                       </TableBody>
                     </Table>
+                    </>
                   )}
                 </div>
               </TabsContent>
@@ -931,7 +978,39 @@ export function ParentPortal() {
                       </p>
                     </>
                   ) : (
-                    <Table>
+                    <>
+                      <div className="flex flex-col gap-3 md:hidden text-left">
+                        {leaveRequests.map((leaveRequest) => (
+                          <div
+                            key={leaveRequest.id}
+                            className="rounded-lg border border-zinc-200 bg-card p-4 shadow-sm dark:border-zinc-800"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <p className="font-semibold text-base">
+                                {new Date(leaveRequest.request_date).toLocaleDateString()}
+                              </p>
+                              <Badge variant={getLeaveStatusVariant(leaveRequest.status)}>
+                                {formatLeaveStatus(leaveRequest.status)}
+                              </Badge>
+                            </div>
+                            <div className="mt-2 space-y-1 text-sm text-muted-foreground">
+                              <p><span className="font-medium text-zinc-700 dark:text-zinc-300">Created By:</span> {leaveRequest.submitted_by_name ?? "N/A"}</p>
+                              <p><span className="font-medium text-zinc-700 dark:text-zinc-300">Created At:</span> {leaveRequest.created_at ? new Date(leaveRequest.created_at).toLocaleString() : "N/A"}</p>
+                              <p><span className="font-medium text-zinc-700 dark:text-zinc-300">Approved/Rejected By:</span> {leaveRequest.approved_by_name ?? leaveRequest.rejected_by_name ?? "N/A"}</p>
+                            </div>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="mt-3 w-full"
+                              onClick={() => handleOpenLeaveRequestDetails(leaveRequest)}
+                            >
+                              <Eye size={16} className="mr-1.5" />
+                              View Details
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                      <Table className="hidden md:table">
                       <TableHeader>
                         <TableRow>
                           <TableHead>Request Date</TableHead>
@@ -951,7 +1030,7 @@ export function ParentPortal() {
                                 leaveRequest.request_date,
                               ).toLocaleDateString()}
                             </TableCell>
-                            <TableCell className="text-left">
+                            <TableCell className="text-left max-w-[120px] truncate" title={leaveRequest.submitted_by_name ?? "N/A"}>
                               {leaveRequest.submitted_by_name ?? "N/A"}
                             </TableCell>
                             <TableCell className="text-left">
@@ -970,7 +1049,7 @@ export function ParentPortal() {
                                 {formatLeaveStatus(leaveRequest.status)}
                               </Badge>
                             </TableCell>
-                            <TableCell className="text-left">
+                            <TableCell className="text-left max-w-[120px] truncate">
                               {leaveRequest.approved_by_name
                                 ? leaveRequest.approved_by_name
                                 : leaveRequest.rejected_by_name
@@ -1004,6 +1083,7 @@ export function ParentPortal() {
                         ))}
                       </TableBody>
                     </Table>
+                    </>
                   )}
                 </div>
               </TabsContent>

@@ -48,10 +48,12 @@ import {
   AlertDialogTrigger,
 } from "../ui/alert-dialog";
 import { toast } from "sonner";
+import { useAuditContext } from "@/hooks/useAuditContext";
 
 const ITEM_PER_PAGE = 15;
 
 export function UserManagement() {
+  const audit = useAuditContext();
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [userPage, setUserPage] = useState(1);
@@ -115,7 +117,7 @@ export function UserManagement() {
   const handleDeleteUser = async (id: string) => {
     setIsLoading(true);
     try {
-      await deleteUserById(id);
+      await deleteUserById(id, audit ?? undefined);
       setDeletingUserId(null);
       loadUsers();
       toast.success("User deleted successfully");
@@ -134,7 +136,7 @@ export function UserManagement() {
     setIsLoading(true);
     setIsLocking(true);
     try {
-      await lockUserById(id);
+      await lockUserById(id, audit ?? undefined);
       loadUsers();
       toast.success(
         existing.isLocked
@@ -157,7 +159,7 @@ export function UserManagement() {
     setIsLoading(true);
     setIsDeactivating(true);
     try {
-      await deactivateUserById(id);
+      await deactivateUserById(id, audit ?? undefined);
       loadUsers();
       toast.success(
         existing.isActive
@@ -177,7 +179,7 @@ export function UserManagement() {
     <div>
       <Card>
         <CardHeader>
-          <div className="flex justify-between items-center">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <CardTitle>User Management</CardTitle>
               <CardDescription>
@@ -191,7 +193,7 @@ export function UserManagement() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="relative max-w-sm mb-4">
+          <div className="relative w-full min-w-0 max-w-sm mb-4">
             <Search
               size={16}
               className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400"
@@ -204,44 +206,162 @@ export function UserManagement() {
               className="w-full rounded-lg border border-zinc-200 bg-white py-2 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
             />
           </div>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>No</TableHead>
-                <TableHead>Name</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Grade</TableHead>
-                <TableHead>Class</TableHead>
-                <TableHead>Role</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Created At</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {!isLoading ? (
-                paginatedUsers.length > 0 ? (
-                  paginatedUsers.map((user, index) => (
-                    <TableRow key={user.id}>
-                      <TableCell>{index + 1}</TableCell>
-                      <TableCell>{user.name}</TableCell>
-                      <TableCell>{user.email}</TableCell>
-                      <TableCell>{user.class?.grade?.name ?? "-"}</TableCell>
-                      <TableCell>{user.class?.name}</TableCell>
-                      <TableCell>{user.role}</TableCell>
-                      <TableCell>
-                        {user.isLocked ? (
-                          <Badge variant="warning">Locked</Badge>
-                        ) : (
-                          <Badge variant={user.isActive ? "success" : "danger"}>
-                            {user.isActive ? "Active" : "Inactive"}
-                          </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {new Date(user.createdAt).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell className="flex items-center gap-2">
+          {!isLoading ? (
+            paginatedUsers.length > 0 ? (
+              <>
+                <div className="flex flex-col gap-3 md:hidden">
+                  {paginatedUsers.map((user, index) => (
+                    <div
+                      key={user.id}
+                      className="rounded-lg border border-zinc-200 bg-card p-4 shadow-sm dark:border-zinc-800"
+                    >
+                      <p className="font-semibold text-base">{user.name}</p>
+                      <div className="mt-2 space-y-1 text-sm text-muted-foreground">
+                        <p>
+                          <span className="font-medium text-zinc-700 dark:text-zinc-300">No:</span>{" "}
+                          {(userPage - 1) * ITEM_PER_PAGE + index + 1}
+                        </p>
+                        <p>
+                          <span className="font-medium text-zinc-700 dark:text-zinc-300">Email:</span>{" "}
+                          {user.email}
+                        </p>
+                        <p>
+                          <span className="font-medium text-zinc-700 dark:text-zinc-300">Grade:</span>{" "}
+                          {user.class?.grade?.name ?? "-"}
+                        </p>
+                        <p>
+                          <span className="font-medium text-zinc-700 dark:text-zinc-300">Class:</span>{" "}
+                          {user.class?.name ?? "-"}
+                        </p>
+                        <p>
+                          <span className="font-medium text-zinc-700 dark:text-zinc-300">Role:</span>{" "}
+                          {user.role}
+                        </p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-medium text-zinc-700 dark:text-zinc-300">Status:</span>
+                          {user.isLocked ? (
+                            <Badge variant="warning">Locked</Badge>
+                          ) : (
+                            <Badge variant={user.isActive ? "success" : "danger"}>
+                              {user.isActive ? "Active" : "Inactive"}
+                            </Badge>
+                          )}
+                        </div>
+                        <p>
+                          <span className="font-medium text-zinc-700 dark:text-zinc-300">Created:</span>{" "}
+                          {new Date(user.createdAt).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="flex-1"
+                          onClick={() => handleEditUser(user.id)}
+                          disabled={isLoading}
+                        >
+                          <Pencil size={16} className="mr-1.5" />
+                          Edit
+                        </Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="flex-1"
+                              onClick={() => setDeletingUserId(user.id)}
+                              disabled={isLoading}
+                            >
+                              <Trash size={16} className="mr-1.5" />
+                              Delete
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Delete User</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Are you sure you want to delete this user?
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel
+                                onClick={() => setDeletingUserId(null)}
+                                disabled={isLoading}
+                              >
+                                Cancel
+                              </AlertDialogCancel>
+                              <AlertDialogAction
+                                onClick={() =>
+                                  handleDeleteUser(deletingUserId ?? "")
+                                }
+                                disabled={!deletingUserId}
+                              >
+                                Delete
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleToggleUserLock(user.id)}
+                          disabled={isLocking}
+                        >
+                          {user.isLocked ? <LockOpen size={16} /> : <Lock size={16} />}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleToggleUserActive(user.id)}
+                          disabled={isDeactivating}
+                        >
+                          {user.isActive ? <PowerOff size={16} /> : <Power size={16} />}
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <Table className="hidden md:table">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-10">No</TableHead>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Grade</TableHead>
+                      <TableHead>Class</TableHead>
+                      <TableHead>Role</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Created At</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedUsers.map((user, index) => (
+                      <TableRow key={user.id}>
+                        <TableCell>{index + 1}</TableCell>
+                        <TableCell className="max-w-[120px] truncate font-medium" title={user.name}>
+                          {user.name}
+                        </TableCell>
+                        <TableCell className="max-w-[140px] truncate" title={user.email}>
+                          {user.email}
+                        </TableCell>
+                        <TableCell>{user.class?.grade?.name ?? "-"}</TableCell>
+                        <TableCell>{user.class?.name}</TableCell>
+                        <TableCell>{user.role}</TableCell>
+                        <TableCell>
+                          {user.isLocked ? (
+                            <Badge variant="warning">Locked</Badge>
+                          ) : (
+                            <Badge variant={user.isActive ? "success" : "danger"}>
+                              {user.isActive ? "Active" : "Inactive"}
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {new Date(user.createdAt).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell className="whitespace-normal text-right">
+                          <div className="flex flex-wrap items-center justify-end gap-1">
                         <Button
                           variant="ghost"
                           size="icon"
@@ -310,29 +430,21 @@ export function UserManagement() {
                             <Power size={16} />
                           )}
                         </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                ) : isLoading ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center">
-                      <Loader2 size={16} className="animate-spin" />
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center">
-                      No users found
-                    </TableCell>
-                  </TableRow>
-                )
-              ) : (
-                <TableRow>
-                  <TableCell className="text-center">No users found</TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </>
+            ) : (
+              <div className="py-8 text-center text-zinc-500">No users found</div>
+            )
+          ) : (
+            <div className="flex justify-center py-8">
+              <Loader2 size={16} className="animate-spin" />
+            </div>
+          )}
           <Pagination
             currentPage={userPage}
             totalPages={Math.ceil(filteredUsers.length / ITEM_PER_PAGE)}
@@ -346,6 +458,7 @@ export function UserManagement() {
         onClose={handleClose}
         onSuccess={loadUsers}
         user={selectedUser ?? undefined}
+        auditContext={audit}
       />
     </div>
   );

@@ -36,6 +36,7 @@ import {
   getVietnamTimestampString,
 } from "@/lib/datetime";
 import { useAppContext } from "../context/useAppContext";
+import { useAuditContext } from "@/hooks/useAuditContext";
 import { useQrCameraScanner } from "@/hooks/useQrCameraScanner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -78,6 +79,7 @@ export function QRScanner() {
     { studentId: string; timestamp: string }[]
   >([]);
   const { user } = useAppContext();
+  const audit = useAuditContext();
 
   const loadStudents = useCallback(async () => {
     if (!user) return;
@@ -300,15 +302,18 @@ export function QRScanner() {
       try {
         if (scanned) {
           if (!todayRecord) {
-            await saveAttendanceRecord({
-              studentId: student.id,
-              date: todayDate,
-              status: "present",
-              timestamp: scanned.timestamp,
-              createdById: user.id,
-              classId: user.classId,
-              semesterId,
-            });
+            await saveAttendanceRecord(
+              {
+                studentId: student.id,
+                date: todayDate,
+                status: "present",
+                timestamp: scanned.timestamp,
+                createdById: user.id,
+                classId: user.classId,
+                semesterId,
+              },
+              audit ?? undefined,
+            );
             presentCount++;
             continue;
           }
@@ -327,15 +332,19 @@ export function QRScanner() {
             todayRecord.status === "absent" ||
             todayRecord.status === "excused_absence"
           ) {
-            await updateAttendanceRecord({
-              id: todayRecord.id,
-              status: "present",
-              timestamp: scanned.timestamp,
-              createdById: user.id,
-              classId: user.classId,
-              semesterId,
-              isLate: true,
-            });
+            await updateAttendanceRecord(
+              {
+                id: todayRecord.id,
+                status: "present",
+                timestamp: scanned.timestamp,
+                createdById: user.id,
+                classId: user.classId,
+                semesterId,
+                isLate: true,
+              },
+              audit ?? undefined,
+              todayRecord,
+            );
             lateCount++;
           }
 
@@ -351,15 +360,18 @@ export function QRScanner() {
           continue;
         }
 
-        await saveAttendanceRecord({
-          studentId: student.id,
-          date: todayDate,
-          status: "absent",
-          timestamp: absentTimestamp,
-          createdById: user.id,
-          classId: user.classId,
-          semesterId,
-        });
+        await saveAttendanceRecord(
+          {
+            studentId: student.id,
+            date: todayDate,
+            status: "absent",
+            timestamp: absentTimestamp,
+            createdById: user.id,
+            classId: user.classId,
+            semesterId,
+          },
+          audit ?? undefined,
+        );
         absentCount++;
       } catch (error) {
         console.error("Failed to save attendance record:", error);
@@ -642,18 +654,18 @@ export function QRScanner() {
               Manual Entry
             </Typography>
             <form onSubmit={handleManualEntry}>
-              <div className="flex gap-2">
+              <div className="flex flex-col gap-2 sm:flex-row">
                 <Input
                   id="manualId"
                   placeholder="Enter Student Name"
                   type="text"
                   value={manualName}
                   onChange={(e) => setManualName(e.target.value)}
-                  className="h-12 rounded-xl border-zinc-200 bg-zinc-50 text-base focus-visible:ring-indigo-500 dark:border-zinc-700 dark:bg-zinc-800/50"
+                  className="h-12 w-full min-w-0 flex-1 rounded-xl border-zinc-200 bg-zinc-50 text-base focus-visible:ring-indigo-500 dark:border-zinc-700 dark:bg-zinc-800/50"
                 />
                 <Button
                   type="submit"
-                  className="h-12 rounded-xl bg-indigo-600 text-base font-semibold shadow-indigo-600/20 hover:bg-indigo-700"
+                  className="h-12 w-full flex-1 rounded-xl bg-indigo-600 text-base font-semibold shadow-indigo-600/20 hover:bg-indigo-700 sm:w-auto sm:flex-none"
                   disabled={!manualName.trim()}
                 >
                   <Plus size={18} />
@@ -759,10 +771,73 @@ export function QRScanner() {
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                 >
+                  {/* Mobile: card list học sinh đã quét */}
+                  <div className="flex flex-col gap-3 md:hidden">
+                    {visibleScannedStudents.map((entry, idx) => {
+                      const student = getStudentById(entry.studentId);
+                      return (
+                        <motion.div
+                          key={entry.studentId}
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          exit={{ opacity: 0, x: 20 }}
+                          transition={{ delay: idx * 0.05, duration: 0.3 }}
+                          className="rounded-lg border border-zinc-200 bg-card p-4 shadow-sm dark:border-zinc-800"
+                        >
+                          <div className="flex items-center gap-3">
+                            <Avatar
+                              sx={{
+                                background:
+                                  "linear-gradient(135deg, #84fab0 0%, #8fd3f4 100%)",
+                                width: 36,
+                                height: 36,
+                              }}
+                            >
+                              {student?.name.charAt(0)}
+                            </Avatar>
+                            <div className="min-w-0 flex-1">
+                              <Typography variant="body2" fontWeight={600}>
+                                {student?.name}
+                              </Typography>
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                              >
+                                {entry.studentId}
+                              </Typography>
+                            </div>
+                          </div>
+                          <div className="mt-3 flex items-center justify-between gap-2">
+                            <Chip
+                              label={formatVietnamTime(entry.timestamp)}
+                              size="small"
+                              sx={{
+                                background:
+                                  "linear-gradient(135deg, #84fab0 0%, #8fd3f4 100%)",
+                                color: "white",
+                                fontWeight: 600,
+                              }}
+                            />
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() =>
+                                handleRemoveStudent(entry.studentId)
+                              }
+                            >
+                              Remove
+                            </Button>
+                          </div>
+                        </motion.div>
+                      );
+                    })}
+                  </div>
+
                   <TableContainer
                     component={Paper}
                     variant="outlined"
-                    sx={{ borderRadius: 2 }}
+                    className="hidden md:block"
+                    sx={{ borderRadius: 2, overflowX: "auto", width: "100%" }}
                   >
                     <Table size="small">
                       <TableHead>

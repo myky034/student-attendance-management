@@ -49,9 +49,11 @@ import { motion } from "motion/react";
 import { Label } from "@radix-ui/react-label";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { useAuditContext } from "@/hooks/useAuditContext";
 const MotionBox = motion.create(Box);
 
 export function AcademicYears() {
+  const audit = useAuditContext();
   const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
@@ -126,7 +128,7 @@ export function AcademicYears() {
 
   const handleDelete = async (academicYearId: string) => {
     try {
-      await deleteAcademicYear(academicYearId);
+      await deleteAcademicYear(academicYearId, audit ?? undefined);
       toast.success("Academic year deleted successfully");
       await loadAcademicYears();
     } catch (error) {
@@ -139,7 +141,7 @@ export function AcademicYears() {
 
   const handleToggleStatus = async (academicYear: AcademicYear) => {
     setIsLoading(true);
-    await toggleAcademicYearStatus(academicYear);
+    await toggleAcademicYearStatus(academicYear, audit ?? undefined);
     await loadAcademicYears();
     setIsLoading(false);
   };
@@ -179,13 +181,16 @@ export function AcademicYears() {
       return;
     }
     try {
-      await saveAcademicYear({
-        ...(isEditMode && formData.id ? { id: formData.id } : {}),
-        name: formData.name.trim(),
-        startDate: formData.startDate,
-        endDate: formData.endDate,
-        isActive: formData.isActive,
-      });
+      await saveAcademicYear(
+        {
+          ...(isEditMode && formData.id ? { id: formData.id } : {}),
+          name: formData.name.trim(),
+          startDate: formData.startDate,
+          endDate: formData.endDate,
+          isActive: formData.isActive,
+        },
+        audit ?? undefined,
+      );
       await loadAcademicYears();
       toast.success("Academic year saved successfully");
       handleClose();
@@ -210,7 +215,7 @@ export function AcademicYears() {
       >
         <Card>
           <CardHeader>
-            <div className="flex justify-between items-center">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               {!showForm && (
                 <>
                   <div>
@@ -340,34 +345,90 @@ export function AcademicYears() {
             </Collapse>
           </CardHeader>
           <CardContent>
-            <Table>
+            {isLoading ? (
+              <div className="flex justify-center items-center py-8">
+                <Loader2 className="w-4 h-4 animate-spin text-zinc-500" />
+              </div>
+            ) : (
+              <>
+                <div className="flex flex-col gap-3 md:hidden">
+                  {academicYears.map((academicYear, index) => (
+                    <div
+                      key={academicYear.id}
+                      className="rounded-lg border border-zinc-200 bg-card p-4 shadow-sm dark:border-zinc-800"
+                    >
+                      <p className="font-semibold text-base">{academicYear.name}</p>
+                      <div className="mt-2 space-y-1 text-sm text-muted-foreground">
+                        <p><span className="font-medium text-zinc-700 dark:text-zinc-300">No:</span> {index + 1}</p>
+                        <p><span className="font-medium text-zinc-700 dark:text-zinc-300">Start:</span> {academicYear.startDate}</p>
+                        <p><span className="font-medium text-zinc-700 dark:text-zinc-300">End:</span> {academicYear.endDate}</p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-medium text-zinc-700 dark:text-zinc-300">Status:</span>
+                          {academicYear.isActive ? (
+                            <Badge variant="success">Active</Badge>
+                          ) : (
+                            <Badge variant="danger">Inactive</Badge>
+                          )}
+                        </div>
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Button variant="outline" size="sm" className="flex-1" onClick={() => handleEdit(academicYear)}>
+                          <Edit size={16} className="mr-1.5" /> Edit
+                        </Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="outline" size="sm"><Trash size={16} /></Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader><AlertDialogTitle>Delete Academic Year</AlertDialogTitle></AlertDialogHeader>
+                            <AlertDialogDescription>Are you sure you want to delete this academic year?</AlertDialogDescription>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => handleDelete(academicYear.id)} className="bg-red-500 hover:bg-red-600 text-white">Delete</AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="outline" size="sm">
+                              {academicYear.isActive ? <PowerOff size={16} /> : <Power size={16} />}
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader><AlertDialogTitle>Toggle Academic Year Status</AlertDialogTitle></AlertDialogHeader>
+                            <AlertDialogDescription>Are you sure you want to toggle the status of this academic year?</AlertDialogDescription>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => handleToggleStatus(academicYear)} disabled={isLoading} className={cn("bg-blue-500 hover:bg-blue-600 text-white", isLoading && "opacity-50 cursor-not-allowed")}>
+                                {isLoading ? <Loader2 className="w-4 h-4 animate-spin text-white" /> : "Toggle"}
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <Table className="hidden md:table">
               <TableHeader>
                 <TableRow>
-                  <TableHead>No</TableHead>
+                  <TableHead className="w-10">No</TableHead>
                   <TableHead>Name</TableHead>
                   <TableHead>Start Date</TableHead>
                   <TableHead>End Date</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Created At</TableHead>
                   <TableHead>Updated At</TableHead>
-                  <TableHead>Actions</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {isLoading ? (
-                  <TableRow>
-                    <TableCell colSpan={8} className="text-center py-4">
-                      <div className="flex justify-center items-center">
-                        <Loader2 className="w-4 h-4 animate-spin text-zinc-500" />
-                      </div>
-                      <span className="text-zinc-500">Loading...</span>
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  academicYears.map((academicYear, index) => (
+                  {academicYears.map((academicYear, index) => (
                     <TableRow key={academicYear.id}>
                       <TableCell>{index + 1}</TableCell>
-                      <TableCell>{academicYear.name}</TableCell>
+                      <TableCell className="max-w-[140px] truncate font-medium" title={academicYear.name}>
+                        {academicYear.name}
+                      </TableCell>
                       <TableCell>{academicYear.startDate}</TableCell>
                       <TableCell>{academicYear.endDate}</TableCell>
                       <TableCell>
@@ -383,7 +444,8 @@ export function AcademicYears() {
                       <TableCell>
                         {new Date(academicYear.updatedAt).toLocaleDateString()}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="whitespace-normal text-right">
+                        <div className="flex flex-wrap items-center justify-end gap-1">
                         <Button
                           variant="ghost"
                           size="sm"
@@ -457,12 +519,14 @@ export function AcademicYears() {
                             </AlertDialogFooter>
                           </AlertDialogContent>
                         </AlertDialog>
+                        </div>
                       </TableCell>
                     </TableRow>
-                  ))
-                )}
+                  ))}
               </TableBody>
             </Table>
+              </>
+            )}
           </CardContent>
         </Card>
       </MotionBox>

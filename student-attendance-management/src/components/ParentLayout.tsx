@@ -12,7 +12,7 @@ export function ParentLayout() {
                 className="text-indigo-600 dark:text-indigo-400 fill-current"
                 size={24}
               />
-              <span className="text-xl font-bold tracking-tight">
+              <span className="truncate text-lg font-bold tracking-tight sm:text-xl">
                 Attendify
               </span>
             </div>

@@ -5,6 +5,7 @@ import { useNavigate } from "react-router";
 import { motion } from "motion/react";
 import { AlertCircle, LogIn, Eye, EyeOff, Sparkles } from "lucide-react";
 import { authenticateUser } from "@/lib/api/user";
+import { writeAuditLog } from "@/lib/audit/writeAuditLog";
 import { useAppContext } from "../context/useAppContext";
 import type { User, UserRole } from "../context/appContext";
 
@@ -67,6 +68,22 @@ export function Login() {
 
       setSessionUser(mapDbUserToSessionUser(userData));
 
+      await writeAuditLog({
+        userId: userData.id,
+        role: userData.role as UserRole,
+        classId: userData.classId?.trim() ? userData.classId : null,
+        userAgent:
+          typeof navigator !== "undefined" ? navigator.userAgent : undefined,
+        action: "LOGIN",
+        entity: "User",
+        entityId: userData.id,
+        newValue: {
+          id: userData.id,
+          email: userData.email,
+          role: userData.role,
+        },
+      });
+
       if (userData.role === "admin" || userData.role === "supervisor") {
         navigate("/admin/dashboard");
       } else {
@@ -87,7 +104,7 @@ export function Login() {
         animate={{ opacity: 1, y: 0 }}
         className="relative z-10 w-full max-w-md bg-white dark:bg-zinc-900 rounded-3xl shadow-xl overflow-hidden border border-zinc-100 dark:border-zinc-800"
       >
-        <div className="p-8">
+        <div className="p-6 sm:p-8">
           <div className="flex justify-center mb-6">
             <div className="w-16 h-16 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-2xl flex items-center justify-center">
               <Sparkles size={32} className="fill-current" />

@@ -1,4 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
+import { writeAuditLogSafe } from "@/lib/audit/writeAuditLog";
+import type { AuditContext } from "@/lib/audit/types";
 
 type ClassRelation = {
   id: string;
@@ -340,7 +342,10 @@ export type RejectLeaveRequestInput = {
   status: string;
 };
 
-export async function cancelLeaveRequest(id: string): Promise<LeaveRequest> {
+export async function cancelLeaveRequest(
+  id: string,
+  audit?: AuditContext,
+): Promise<LeaveRequest> {
   const supabase = createClient();
   const { data, error } = await supabase
     .from("LeaveRequest")
@@ -358,6 +363,16 @@ export async function cancelLeaveRequest(id: string): Promise<LeaveRequest> {
   }
 
   const [mapped] = await mapLeaveRequestRows([data as LeaveRequestRow]);
+  if (audit) {
+    writeAuditLogSafe({
+      ...audit,
+      action: "CANCEL",
+      entity: "LeaveRequest",
+      entityId: mapped.id,
+      classId: mapped.class_id,
+      newValue: mapped,
+    });
+  }
   return mapped;
 }
 
@@ -418,6 +433,7 @@ export async function getLeaveRequestsByClassId(
 
 export async function createLeaveRequest(
   leaveRequest: CreateLeaveRequestInput,
+  audit?: AuditContext,
 ): Promise<LeaveRequest> {
   const supabase = createClient();
   const { data, error } = await supabase
@@ -440,11 +456,22 @@ export async function createLeaveRequest(
   }
 
   const [mapped] = await mapLeaveRequestRows([data as LeaveRequestRow]);
+  if (audit) {
+    writeAuditLogSafe({
+      ...audit,
+      action: "CREATE",
+      entity: "LeaveRequest",
+      entityId: mapped.id,
+      classId: mapped.class_id,
+      newValue: mapped,
+    });
+  }
   return mapped;
 }
 
 export async function updateLeaveRequest(
   leaveRequest: UpdateLeaveRequestInput,
+  audit?: AuditContext,
 ): Promise<LeaveRequest> {
   const supabase = createClient();
   const { data, error } = await supabase
@@ -467,23 +494,37 @@ export async function updateLeaveRequest(
   }
 
   const [mapped] = await mapLeaveRequestRows([data as LeaveRequestRow]);
+  if (audit) {
+    writeAuditLogSafe({
+      ...audit,
+      action: "UPDATE",
+      entity: "LeaveRequest",
+      entityId: mapped.id,
+      classId: mapped.class_id,
+      newValue: mapped,
+    });
+  }
   return mapped;
 }
 
 export async function saveLeaveRequest(
   leaveRequest: SaveLeaveRequestInput,
+  audit?: AuditContext,
 ): Promise<LeaveRequest> {
   if (leaveRequest.id) {
     const existing = await getLeaveRequestByStudentId(leaveRequest.student_id);
     if (!existing) {
       throw new Error(`Leave request not found: ${leaveRequest.student_id}`);
     }
-    return updateLeaveRequest({
-      ...leaveRequest,
-      id: existing.id,
-    });
+    return updateLeaveRequest(
+      {
+        ...leaveRequest,
+        id: existing.id,
+      },
+      audit,
+    );
   }
-  return createLeaveRequest(leaveRequest);
+  return createLeaveRequest(leaveRequest, audit);
 }
 
 export async function deleteLeaveRequest(id: string): Promise<void> {
@@ -496,6 +537,7 @@ export async function deleteLeaveRequest(id: string): Promise<void> {
 
 export async function approveLeaveRequest(
   leaveRequest: ApproveLeaveRequestInput,
+  audit?: AuditContext,
 ): Promise<LeaveRequest> {
   const supabase = createClient();
   const { data, error } = await supabase
@@ -515,11 +557,22 @@ export async function approveLeaveRequest(
   }
 
   const [mapped] = await mapLeaveRequestRows([data as LeaveRequestRow]);
+  if (audit) {
+    writeAuditLogSafe({
+      ...audit,
+      action: "APPROVE",
+      entity: "LeaveRequest",
+      entityId: mapped.id,
+      classId: mapped.class_id,
+      newValue: mapped,
+    });
+  }
   return mapped;
 }
 
 export async function rejectLeaveRequest(
   leaveRequest: RejectLeaveRequestInput,
+  audit?: AuditContext,
 ): Promise<LeaveRequest> {
   const supabase = createClient();
   const { data, error } = await supabase
@@ -539,5 +592,15 @@ export async function rejectLeaveRequest(
   }
 
   const [mapped] = await mapLeaveRequestRows([data as LeaveRequestRow]);
+  if (audit) {
+    writeAuditLogSafe({
+      ...audit,
+      action: "REJECT",
+      entity: "LeaveRequest",
+      entityId: mapped.id,
+      classId: mapped.class_id,
+      newValue: mapped,
+    });
+  }
   return mapped;
 }

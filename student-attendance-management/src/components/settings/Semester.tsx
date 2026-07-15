@@ -61,6 +61,7 @@ import {
 import { getAcademicYears, type AcademicYear } from "@/lib/api/academicyear";
 import { Pagination } from "@/components/ui/pagination";
 import { toast } from "sonner";
+import { useAuditContext } from "@/hooks/useAuditContext";
 
 const MotionBox = motion.create(Box);
 
@@ -102,6 +103,7 @@ function matchesSemesterFilters(
 }
 
 export function Semester() {
+  const audit = useAuditContext();
   const [semesters, setSemesters] = useState<Semester[]>([]);
   const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -308,16 +310,19 @@ export function Semester() {
       return;
     }
     try {
-      await saveSemester({
-        ...(isEditMode && formData.id ? { id: formData.id } : {}),
-        name: formData.name.trim(),
-        code: formData.code.trim(),
-        startDate: formData.startDate,
-        endDate: formData.endDate,
-        sortOrder: formData.sortOrder,
-        isActive: formData.isActive,
-        academicYearId: formData.academicYearId,
-      });
+      await saveSemester(
+        {
+          ...(isEditMode && formData.id ? { id: formData.id } : {}),
+          name: formData.name.trim(),
+          code: formData.code.trim(),
+          startDate: formData.startDate,
+          endDate: formData.endDate,
+          sortOrder: formData.sortOrder,
+          isActive: formData.isActive,
+          academicYearId: formData.academicYearId,
+        },
+        audit ?? undefined,
+      );
       toast.success("Semester saved successfully");
       handleClose();
       await loadSemesters();
@@ -331,7 +336,7 @@ export function Semester() {
 
   const handleDelete = async (semesterId: string) => {
     try {
-      await deleteSemester(semesterId);
+      await deleteSemester(semesterId, audit ?? undefined);
       toast.success("Semester deleted successfully");
       await loadSemesters();
     } catch (error) {
@@ -341,7 +346,7 @@ export function Semester() {
 
   const handleToggleStatus = async (semester: Semester) => {
     try {
-      await toggleSemesterStatus(semester);
+      await toggleSemesterStatus(semester, audit ?? undefined);
       toast.success("Semester status toggled successfully");
       await loadSemesters();
     } catch (error) {
@@ -363,7 +368,7 @@ export function Semester() {
       >
         <Card>
           <CardHeader>
-            <div className="flex justify-between items-center">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               {!showForm && (
                 <>
                   <div>
@@ -543,8 +548,8 @@ export function Semester() {
             </Collapse>
           </CardHeader>
           <CardContent>
-            <div className="flex flex-wrap items-end justify-start gap-4 mb-4">
-              <div className="relative max-w-sm w-full space-y-2">
+            <div className="mb-4 flex w-full flex-col gap-3 lg:flex-row lg:flex-nowrap lg:items-end lg:gap-4">
+              <div className="relative w-full min-w-0 space-y-2 lg:min-w-[180px] lg:flex-1">
                 <Label htmlFor="searchName">Search</Label>
                 <div className="relative">
                   <Search
@@ -557,35 +562,37 @@ export function Semester() {
                     placeholder="Search by name, code"
                     value={searchName}
                     onChange={(e) => handleSearchChange(e.target.value)}
-                    className="w-full rounded-lg border border-zinc-200 bg-white py-2 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+                    className="w-full min-w-0 rounded-lg border border-zinc-200 bg-white py-2 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
                   />
                 </div>
               </div>
-              <div className="space-y-2">
+              <div className="w-full min-w-0 space-y-2 lg:w-auto lg:min-w-[140px] lg:shrink-0">
                 <Label htmlFor="filterStartDate">Start Date</Label>
                 <Input
                   id="filterStartDate"
                   type="date"
                   value={searchStartDate}
                   onChange={(e) => handleSearchStartDateChange(e.target.value)}
+                  className="w-full min-w-0"
                 />
               </div>
-              <div className="space-y-2">
+              <div className="w-full min-w-0 space-y-2 lg:w-auto lg:min-w-[140px] lg:shrink-0">
                 <Label htmlFor="filterEndDate">End Date</Label>
                 <Input
                   id="filterEndDate"
                   type="date"
                   value={searchEndDate}
                   onChange={(e) => handleSearchEndDateChange(e.target.value)}
+                  className="w-full min-w-0"
                 />
               </div>
-              <div className="space-y-2 min-w-[180px]">
+              <div className="w-full min-w-0 space-y-2 lg:w-auto lg:min-w-[160px] lg:shrink-0">
                 <Label htmlFor="filterAcademicYearId">Academic Year</Label>
                 <Select
                   value={searchAcademicYearId}
                   onValueChange={handleSearchAcademicYearChange}
                 >
-                  <SelectTrigger id="filterAcademicYearId">
+                  <SelectTrigger id="filterAcademicYearId" className="w-full min-w-0">
                     <SelectValue placeholder="Select Academic Year" />
                   </SelectTrigger>
                   <SelectContent>
@@ -599,13 +606,16 @@ export function Semester() {
                 </Select>
               </div>
               {hasActiveFilters && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleClearFilters}
-                >
-                  Clear filters
-                </Button>
+                <div className="w-full shrink-0 lg:w-auto">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full lg:w-auto"
+                    onClick={handleClearFilters}
+                  >
+                    Clear filters
+                  </Button>
+                </div>
               )}
             </div>
             {searchStartDate &&
@@ -615,10 +625,71 @@ export function Semester() {
                   Filter start date must be before or equal to end date.
                 </p>
               )}
-            <Table>
+            {isLoading ? (
+              <div className="flex flex-col items-center gap-2 py-8">
+                <Loader2 className="w-4 h-4 animate-spin text-zinc-500" />
+                <span className="text-zinc-500">Loading...</span>
+              </div>
+            ) : filteredSemesters.length === 0 ? (
+              <div className="py-8 text-center">
+                <p className="text-zinc-500">
+                  {hasActiveFilters
+                    ? "No semesters match your search or filters."
+                    : "No semesters found."}
+                </p>
+              </div>
+            ) : (
+              <>
+                <div className="flex flex-col gap-3 md:hidden">
+                  {paginatedSemesters.map((semester, index) => (
+                    <div
+                      key={semester.id}
+                      className="rounded-lg border border-zinc-200 bg-card p-4 shadow-sm dark:border-zinc-800"
+                    >
+                      <p className="font-semibold text-base">{semester.name}</p>
+                      <div className="mt-2 space-y-1 text-sm text-muted-foreground">
+                        <p><span className="font-medium text-zinc-700 dark:text-zinc-300">No:</span> {(safeCurrentPage - 1) * ITEMS_PER_PAGE + index + 1}</p>
+                        <p><span className="font-medium text-zinc-700 dark:text-zinc-300">Code:</span> {semester.code}</p>
+                        <p><span className="font-medium text-zinc-700 dark:text-zinc-300">Start:</span> {semester.startDate}</p>
+                        <p><span className="font-medium text-zinc-700 dark:text-zinc-300">End:</span> {semester.endDate}</p>
+                        <p><span className="font-medium text-zinc-700 dark:text-zinc-300">Academic Year:</span> {academicYears.find((y) => y.id === semester.academicYearId)?.name}</p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-medium text-zinc-700 dark:text-zinc-300">Status:</span>
+                          {semester.isActive ? <Badge variant="success">Active</Badge> : <Badge variant="danger">Inactive</Badge>}
+                        </div>
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Button variant="outline" size="sm" className="flex-1" onClick={() => handleEdit(semester)}><Edit size={16} className="mr-1.5" />Edit</Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild><Button variant="outline" size="sm"><Trash size={16} /></Button></AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader><AlertDialogTitle>Delete Semester</AlertDialogTitle></AlertDialogHeader>
+                            <AlertDialogDescription>Are you sure you want to delete this semester?</AlertDialogDescription>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => handleDelete(semester.id)} className="bg-red-500 hover:bg-red-600 text-white">Delete</AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild><Button variant="outline" size="sm">{semester.isActive ? <PowerOff size={16} /> : <Power size={16} />}</Button></AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader><AlertDialogTitle>Toggle Semester Status</AlertDialogTitle></AlertDialogHeader>
+                            <AlertDialogDescription>Are you sure you want to toggle the status of this semester?</AlertDialogDescription>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => handleToggleStatus(semester)} disabled={isLoading} className={cn("bg-blue-500 hover:bg-blue-600 text-white", isLoading && "opacity-50 cursor-not-allowed")}>{isLoading ? <Loader2 className="w-4 h-4 animate-spin text-white" /> : "Toggle"}</AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <Table className="hidden md:table">
               <TableHeader>
                 <TableRow>
-                  <TableHead>No</TableHead>
+                  <TableHead className="w-10">No</TableHead>
                   <TableHead>Name</TableHead>
                   <TableHead>Code</TableHead>
                   <TableHead>Start Date</TableHead>
@@ -627,40 +698,22 @@ export function Semester() {
                   <TableHead>Status</TableHead>
                   <TableHead>Created At</TableHead>
                   <TableHead>Updated At</TableHead>
-                  <TableHead>Actions</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {isLoading ? (
-                  <TableRow>
-                    <TableCell colSpan={10} className="text-center py-4">
-                      <div className="flex flex-col items-center gap-2">
-                        <Loader2 className="w-4 h-4 animate-spin text-zinc-500" />
-                        <span className="text-zinc-500">Loading...</span>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ) : filteredSemesters.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={10} className="text-center py-8">
-                      <p className="text-zinc-500">
-                        {hasActiveFilters
-                          ? "No semesters match your search or filters."
-                          : "No semesters found."}
-                      </p>
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  paginatedSemesters.map((semester, index) => (
+                  {paginatedSemesters.map((semester, index) => (
                     <TableRow key={semester.id}>
                       <TableCell>
                         {(safeCurrentPage - 1) * ITEMS_PER_PAGE + index + 1}
                       </TableCell>
-                      <TableCell>{semester.name}</TableCell>
+                      <TableCell className="max-w-[140px] truncate font-medium" title={semester.name}>
+                        {semester.name}
+                      </TableCell>
                       <TableCell>{semester.code}</TableCell>
                       <TableCell>{semester.startDate}</TableCell>
                       <TableCell>{semester.endDate}</TableCell>
-                      <TableCell>
+                      <TableCell className="max-w-[120px] truncate">
                         {
                           academicYears.find(
                             (academicYear) =>
@@ -681,7 +734,8 @@ export function Semester() {
                       <TableCell>
                         {new Date(semester.updatedAt).toLocaleDateString()}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="whitespace-normal text-right">
+                        <div className="flex flex-wrap items-center justify-end gap-1">
                         <Button
                           variant="ghost"
                           size="sm"
@@ -754,12 +808,14 @@ export function Semester() {
                             </AlertDialogFooter>
                           </AlertDialogContent>
                         </AlertDialog>
+                        </div>
                       </TableCell>
                     </TableRow>
-                  ))
-                )}
+                  ))}
               </TableBody>
             </Table>
+              </>
+            )}
           </CardContent>
           <CardFooter>
             <div className="flex flex-col items-center gap-2 w-full">
